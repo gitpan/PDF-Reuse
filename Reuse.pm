@@ -16,7 +16,7 @@ use autouse 'Compress::Zlib' => qw(compress($)
 use autouse 'Data::Dumper'   => qw(Dumper);
 use AutoLoader qw(AUTOLOAD);
 
-our $VERSION = '0.15';
+our $VERSION = '0.16';
 our @ISA     = qw(Exporter);
 our @EXPORT  = qw(prFile
                   prPage
@@ -52,9 +52,7 @@ our @EXPORT  = qw(prFile
                   prMbox
                   prBookmark);
 
-our ($utfil, $utrad, $slutNod, $formCont,
-    $formRot, $obj, $nr,
-    $vektor, $parent, $infil, $imSeq, $rform, $robj,
+our ($utfil, $slutNod, $formCont, $imSeq, $duplicateInits,
     $page, $Annots, $Names, $AARoot, $AAPage, $sidObjNr,  
     $AcroForm, $interActive, $NamesSaved, $AARootSaved, $AAPageSaved, $root,
     $AcroFormSaved, $AnnotsSaved, $id, $ldir, $checkId, $formNr, $imageNr, 
@@ -263,7 +261,7 @@ sub prFile
    }
    open (UTFIL, ">$utfil") || errLog("Couldn't open file $utfil, $!");
    binmode UTFIL;
-   $utrad = '%PDF-1.4' . "\n" . '%âãÏÓ' . "\n";
+   my $utrad = "\%PDF-1.4\n\%\â\ã\Ï\Ó\n";
    
    $pos   = syswrite UTFIL, $utrad; 
 
@@ -313,7 +311,7 @@ sub prFile
    undef $AARootSaved;
    undef $AcroFormSaved;
    $checkId    = '';
-   # undef $aktNod;
+   undef $duplicateInits;
    undef $confuseObj;
    $fontSize  = 12;
    $genLowerX = 0;
@@ -427,7 +425,7 @@ sub prAdd
 ################# Ett grafiskt "formulär" ################
 
 sub prForm
-{ my ($sidnr, $adjust, $effect, $tolerant);
+{ my ($sidnr, $adjust, $effect, $tolerant, $infil);
   my $param = shift;
   if (ref($param) eq 'HASH')
   {  $infil    = $param->{'file'};
@@ -561,7 +559,7 @@ sub prDefaultGrState
    }
 
    $objekt[$objNr] = $pos;
-   $utrad = "$objNr 0 obj\n" . '<</Type/ExtGState/SA false/SM 0.02/TR2 /Default'
+   my $utrad = "$objNr 0 obj\n" . '<</Type/ExtGState/SA false/SM 0.02/TR2 /Default'
            . ">>\nendobj\n";
    $pos += syswrite UTFIL, $utrad;
    $objRef{'Gs0'} = $objNr;
@@ -646,7 +644,7 @@ sub skrivSida
    {  @extObj = ($stream =~ m'/(\S+)\s*'gso);
       checkContentStream(@extObj);
    }
-   if (( $compress ) && ( length($stream)  > 100 ))
+   if (( $compress ) && ( length($stream)  > 99 ))
    {   my $output = compress($stream);
        if ((length($output) > 25) && (length($output) < (length($stream))))
        {  $stream = $output;
@@ -658,7 +656,7 @@ sub skrivSida
    { $objNr++;
      $parents[0] = $objNr;
    }
-   $parent = $parents[0];
+   my $parent = $parents[0];
 
    ##########################################   
    #  Interaktiva funktioner läggs ev. till
@@ -856,7 +854,7 @@ sub prEnd
     {  $objNr--;                   # reserverat sidobjektnr utnyttjades aldrig
     }
 
-    $utrad = "1 0 obj\n<</Type/Catalog/Pages $slutNod 0 R";
+    my $utrad = "1 0 obj\n<</Type/Catalog/Pages $slutNod 0 R";
     if (defined $NamesSaved)
     {  $utrad .= "\/Names $NamesSaved 0 R\n"; 
     }
@@ -925,6 +923,7 @@ sub ordnaNoder
 {  my $antBarn = shift;
    my $i       = 0;
    my $j       = 1;
+   my $vektor;
       
    while  ($antBarn < $#{$kids[$i]})
    {  # 
@@ -959,10 +958,8 @@ sub ordnaNoder
           
 sub skrivUtNoder
 {  no warnings;
-   my $i;
-   my $j;
+   my ($i, $j, $vektor, $nodObjekt);
    my $si = -1;
-   my $nodObjekt;
    #
    # Hitta slutnoden
    #
@@ -1285,15 +1282,18 @@ time stamp
 
 =head2 prCompress ( [1] )
 
-'1' here is a directive to compress the streams of the current file.
-Streams shorter than 101 bytes are not compressed. The streams are compressed in
-memory, so probably there is a limit of how big the streams can be.
+'1' here is a directive to compress all B<new> streams of the current file. Streams
+which are included with prForm, prDocForm and prDoc are not changed. New 
+JavaScripts are also created as streams and compressed, if they are at least 100
+bytes long. The streams are compressed in memory, so probably there is a limit of
+how big they can be.
 prCompress(); is a directive not to compress. This is default.
 
 See e.g. "Starting to reuse" in the tutorial for an example.
 
 =head2 prDoc ( $documentName )
 
+Returns number of pages.
 Adds a document to the document you are creating. If it is the first interactive
 component ( prDoc() or prDocForm() ) the interactive functions are kept and also merged
 with JavaScripts you have added (if any).
@@ -1706,12 +1706,16 @@ included images in a PDF-file and their "names". (The program cannot yet handle 
 with 'cross reference objects' and 'object streams' from Acrobat 6.0)
 
 
-=head2 prInit ( $string )
+=head2 prInit ( $string[, $duplicateCode] )
 
 B<$string> can be any JavaScript code, but you can only refer to functions included
 with prJs. The JavaScript interpreter will not know other functions in the document.
 Often you can add new things, but you can't remove or change interactive fields,
 because the interpreter hasn't come that far, when initiation is done.
+B<$duplicateCode> is undefined or anything. It duplicates the JavaScript code
+which has been used at initiation, so you can look at it from within Acrobat and
+debug it. It makes the document bigger.
+  
 See prJs() for an example
 
 
@@ -2097,57 +2101,48 @@ sub descend
      }     
 
      if (exists $entry{'act'})
-     {   $objNr++;
-         $jsObj = $objNr;
-         my $code = $entry{'act'};
+     {   my $code = $entry{'act'};
          if ($code =~ m/^\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*$/os)
-         {  $code = "this.pageNum = $1; this.scroll\\($2, $3\\);";
+         {  $code = "this.pageNum = $1; this.scroll($2, $3);";
          }
-         else
-         {  $code =~ s'\('\\('gso;
-            $code =~ s'\)'\\)'gso;
-         }
-         $objekt[$jsObj] = $pos;
-         $rad = "$jsObj 0 obj\n<<\n/S /JavaScript\n/JS ($code)\n>>\nendobj\n";
-         $pos += syswrite UTFIL, $rad;
-      } 
+         $jsObj = skrivJS($code);         
+     } 
 
-      $objekt[$me] = $pos;
-      $rad = "$me 0 obj\n<<\n";
-      if (exists $entry{'text'})
-      {   $rad .= "/Title ($entry{'text'})\n";
-      }
-      $rad .= "/Parent $parent 0 R\n";
-      if (defined $jsObj)
-      {  $rad .= "/A $jsObj 0 R\n";
-      }
-      if (exists $entry{'previous'})
-      {  $rad .= "/Prev $entry{'previous'} 0 R\n";
-      }
-      if (exists $entry{'next'})
-      {  $rad .= "/Next $entry{'next'} 0 R\n";
-      }
-      if (defined $first)
-      {  $rad .= "/First $first 0 R\n";
-      }
-      if (defined $last)
-      {  $rad .= "/Last $last 0 R\n";
-      }
-      if ($count != $totalCount)
-      {   $count = $totalCount - $count;
-          $rad .= "/Count $count\n";
-      }
-      if (exists $entry{'color'})
-      {   $rad .= "/C [$entry{'color'}]\n";
-      }
-      if (exists $entry{'style'})
-      {   $rad .= "/F $entry{'style'}\n";
-      }
+     $objekt[$me] = $pos;
+     $rad = "$me 0 obj\n<<\n";
+     if (exists $entry{'text'})
+     {   $rad .= "/Title ($entry{'text'})\n";
+     }
+     $rad .= "/Parent $parent 0 R\n";
+     if (defined $jsObj)
+     {  $rad .= "/A $jsObj 0 R\n";
+     }
+     if (exists $entry{'previous'})
+     {  $rad .= "/Prev $entry{'previous'} 0 R\n";
+     }
+     if (exists $entry{'next'})
+     {  $rad .= "/Next $entry{'next'} 0 R\n";
+     }
+     if (defined $first)
+     {  $rad .= "/First $first 0 R\n";
+     }
+     if (defined $last)
+     {  $rad .= "/Last $last 0 R\n";
+     }
+     if ($count != $totalCount)
+     {   $count = $totalCount - $count;
+         $rad .= "/Count $count\n";
+     }
+     if (exists $entry{'color'})
+     {   $rad .= "/C [$entry{'color'}]\n";
+     }
+     if (exists $entry{'style'})
+     {   $rad .= "/F $entry{'style'}\n";
+     }
 
-      $rad .= ">>\nendobj\n";
-      $pos += syswrite UTFIL, $rad;
+     $rad .= ">>\nendobj\n";
+     $pos += syswrite UTFIL, $rad;
 }  
-
 
 sub prInitVars
 {   my $exit = shift;
@@ -2156,9 +2151,7 @@ sub prInitVars
     $genUpperX    = 595,
     $genUpperY    = 842;
     $fontSize     = 12;
-    ($utfil, $utrad, $slutNod, $formCont,
-    $formRot, $obj, $nr,
-    $vektor, $parent, $infil, $imSeq, $rform, $robj,
+    ($utfil, $slutNod, $formCont, $imSeq, 
     $page, $Annots, $Names, $AARoot, $AAPage, $sidObjNr,  
     $AcroForm, $interActive, $NamesSaved, $AARootSaved, $AAPageSaved, $root,
     $AcroFormSaved, $AnnotsSaved, $id, $ldir, $checkId, $formNr, $imageNr, 
@@ -2439,8 +2432,8 @@ sub prExtract
 
 ########## Extrahera ett dokument ####################       
 sub prDoc
-{ $infil = shift;
-
+{ my $infil = shift;
+  
   if ($stream)
   {  if ($stream =~ m'\S+'os)
      {  skrivSida();}
@@ -2452,7 +2445,7 @@ sub prDoc
   { $objNr--;
   }
   
-  analysera();
+  my $sidor = analysera($infil);
   if (($Names) || ($AARoot) || ($AcroForm))
   { $NamesSaved     = $Names;
     $AARootSaved    = $AARoot;
@@ -2466,12 +2459,13 @@ sub prDoc
   if (! $pos)
   {  errLog("No output file, you have to call prFile first");
   }
+  return $sidor;
 }
 
 ############# Ett interaktivt + grafiskt "formulär" ##########
 
 sub prDocForm
-{ my ($sidnr, $adjust, $effect, $action, $tolerant);
+{ my ($sidnr, $adjust, $effect, $action, $tolerant, $infil);
   my $param = shift;
   if (ref($param) eq 'HASH')
   {  $infil    = $param->{'file'};
@@ -2646,8 +2640,7 @@ sub calcMatrix
 
 sub prJpeg
 {  my ($iFile, $iWidth, $iHeight) = @_;
-   my $iLangd;
-   my $namnet;
+   my ($iLangd, $namnet, $utrad);
    if (! $pos)                    # If no output is active, it is no use to continue
    {   return undef;
    }
@@ -2717,7 +2710,7 @@ sub prGraphState
    my $name = 'Gs' . $gSNr ;
    $objNr++;
    $objekt[$objNr] = $pos;
-   $utrad = "$objNr 0 obj\n" . $string  . "\nendobj\n";
+   my $utrad = "$objNr 0 obj\n" . $string  . "\nendobj\n";
    $pos += syswrite UTFIL, $utrad;
    $objRef{$name} = $objNr;
    if ($runfil)
@@ -2788,7 +2781,7 @@ sub createCharProcs()
     my $tomtObj = $objNr;
     my $str = "\n75 0 d0\n6 0 69 2000 re\n1.0 g\nf\n";
     my $strLength = length($str);
-    $obj = "$objNr 0 obj\n<< /Length $strLength >>\nstream" .
+    my $obj = "$objNr 0 obj\n<< /Length $strLength >>\nstream" .
            $str . "\nendstream\nendobj\n";
     $pos += syswrite UTFIL, $obj;
 
@@ -2890,17 +2883,21 @@ sub prJs
 }
 
 sub prInit
-{   my $initText = shift;
+{   my $initText  = shift;
+    my $duplicate = shift || '';
     my @fall = ($initText =~ m'([\w\d\_\$]+)\s*\(.*?\)'gs);
     for (@fall)
     {  if (! exists $initScript{$_})
        { $initScript{$_} = 0; 
        }
     }
+    if ($duplicate)
+    {  $duplicateInits = 1;
+    }
     push @inits, $initText;
     if ($runfil)
     {   $initText = prep($initText);
-        $log .= "Init~$initText\n";
+        $log .= "Init~$initText~$duplicate\n";
     }
     if ($interAktivSida)
     {  errLog("Too late, has already tried to create INITIAL JAVA SCRIPTS within an interactive page");
@@ -3006,7 +3003,7 @@ sub prep
 
 
 sub xRefs
-{  my $bytes = shift;
+{  my ($bytes, $infil) = @_;
    my ($j, $nr, $xref, $i, $antal, $inrad, $Root, $tempRoot, $referens);
    my $buf = '';
    %embedded =();
@@ -3026,7 +3023,7 @@ sub xRefs
             {  ($xref, $tempRoot, $nr) = crossrefObj($nr, $xref);
             }
             else
-            {  ($xref, $tempRoot, $nr) = xrefSection($nr, $xref);
+            {  ($xref, $tempRoot, $nr) = xrefSection($nr, $xref, $infil);
             }
             if (($tempRoot) && (! $Root))
             {  $Root = $tempRoot;
@@ -3177,7 +3174,7 @@ sub crossrefObj
 }
  
 sub xrefSection
-{   my ($nr, $xref) = @_;
+{   my ($nr, $xref, $infil) = @_;
     my ($i, $root, $antal);    
     $nr++;
     $oldObject{('xref' . "$nr")} = $xref;  # Offset för xref sparas 
@@ -3241,7 +3238,7 @@ sub xrefSection
     {   if ($buf =~ m'Encrypt'o)
         {  errLog("The file $infil is encrypted, cannot be used, aborts");
         }
-        if ((! $root) && ($buf =~ m'\/Root\s+(\d+) \d+ R'so))
+        if ((! $root) && ($buf =~ m'\/Root\s+(\d+)\s{1,2}\d+\s{1,2}R'so))
         {  $root = $1;
            if ($xref)
            { last; }
@@ -3387,17 +3384,16 @@ sub unZipPrepare
 ############################################
 
 sub getPage
-{  my ($fil, $sidnr, $action)  = @_;
+{  my ($infil, $sidnr, $action)  = @_;
 
-   my ($res, $i, $referens,$objNrSaved,$validStream, $formRes, @objData,
+   my ($res, $i, $referens,$objNrSaved,$validStream, $formRes, @objData, 
        @underObjekt, @sidObj, $strPos, $startSida, $sidor, $filId, $del1, $del2,
-       $offs, $siz, $embedded);
+       $offs, $siz, $embedded, $vektor, $utrad, $robj);
    my $sidAcc = 0;
    my $seq    = 0;
    $imSeq     = 0;
    @skapa     = ();   
    undef $formCont;
-   undef $obj;
    undef $AcroForm;
    undef $Annots;
    undef $Names;
@@ -3405,11 +3401,9 @@ sub getPage
    undef $AAPage;
    
    $objNrSaved = $objNr;   
-   
-   $infil = $fil;
    my $fSource = $infil . '_' . $sidnr;
    my $checkidOld = $checkId;
-   ($fil, $checkId) = findGet($fil, $checkidOld);
+   ($infil, $checkId) = findGet($infil, $checkidOld);
    if (($ldir) && ($checkId) && ($checkId ne $checkidOld))
    {  $log .= "Cid~$checkId\n";
    }
@@ -3431,7 +3425,7 @@ sub getPage
    {  $lastFile = $infil;
       %oldObject = ();
       %unZipped  = ();   
-      $root = xRefs($stati[7]);
+      $root = xRefs($stati[7], $infil);
    }
 
    #############
@@ -3441,10 +3435,10 @@ sub getPage
    my $objektet = getObject($root);;
    
    if ($sidnr == 1) 
-   {  if ($objektet =~ m'/AcroForm(\s+\d+ \d+ R)'so)
+   {  if ($objektet =~ m'/AcroForm(\s+\d+\s{1,2}\d+\s{1,2}R)'so)
       {  $AcroForm = $1;
       }
-      if ($objektet =~ m'/Names\s+(\d+) \d+ R'so)
+      if ($objektet =~ m'/Names\s+(\d+)\s{1,2}\d+\s{1,2}R'so)
       {  $Names = $1;
       } 
       #################################################
@@ -3474,7 +3468,7 @@ sub getPage
    # Hitta pages
    #
  
-   if ($objektet =~ m'/Pages\s+(\d+) \d+ R'os)
+   if ($objektet =~ m'/Pages\s+(\d+)\s{1,2}\d+\s{1,2}R'os)
    {  $objektet = getObject($1);
       if ($objektet =~ m'/Count\s+(\d+)'os)
       {  $sidor = $1;
@@ -3496,7 +3490,7 @@ sub getPage
 
    if ($objektet =~ m'/Kids\s*\[([^\]]+)'os)
    {  $vektor = $1; } 
-   while ($vektor =~ m'(\d+) \d+ R'go)
+   while ($vektor =~ m'(\d+)\s{1,2}\d+\s{1,2}R'go)
    {   push @sidObj, $1;       
    }
 
@@ -3516,7 +3510,7 @@ sub getPage
             {  $formRes = kolla($objektet, $formRes);
                if ($objektet =~ m'/Kids\s*\[([^\]]+)'os)
                {  $vektor = $1; } 
-               while ($vektor =~ m'(\d+) \d+ R'gso)
+               while ($vektor =~ m'(\d+)\s{1,2}\d+\s{1,2}R'gso)
                {   push @sidObj, $1;  }
                last; 
             }
@@ -3567,7 +3561,7 @@ sub getPage
       
    }
 
-   $rform = \$form{$fSource};
+   my $rform = \$form{$fSource};
    @$$rform[fRESOURCE]  = $formRes;
    my @BBox;
    if (defined $formBox[0])
@@ -3617,7 +3611,7 @@ sub getPage
           }
           $referens = $objNr;
 
-          $res = ($nyDel1 =~ s/\b(\d+) \d+ R\b/xform() . ' 0 R'/oegs);
+          $res = ($nyDel1 =~ s/\b(\d+)\s{1,2}\d+\s{1,2}R\b/xform() . ' 0 R'/oegs);
           if ($res)
           { $$$robj[oKIDS] = 1; }
           if ($action eq 'print')
@@ -3629,11 +3623,11 @@ sub getPage
           $form{$fSource}[fVALID] = $validStream;
       }
       else                              # Endast resurserna kan behandlas
-      {   $formRes =~ s/\b(\d+) \d+ R\b/xform() . ' 0 R'/oegs;  
+      {   $formRes =~ s/\b(\d+)\s{1,2}\d+\s{1,2}R\b/xform() . ' 0 R'/oegs;  
       }
    }
    else                                # Endast resurserna kan behandlas
-   {  $formRes =~ s/\b(\d+) \d+ R\b/xform() . ' 0 R'/oegs;
+   {  $formRes =~ s/\b(\d+)\s{1,2}\d+\s{1,2}R\b/xform() . ' 0 R'/oegs;
    } 
       
    my $preLength;
@@ -3664,7 +3658,7 @@ sub getPage
                if ($del1 =~ m'/Height\s+(\d+)'os)
                {  $$$robj[oHEIGHT] = $1; }
             }     
-            $res = ($del1 =~ s/\b(\d+) \d+ R\b/xform() . ' 0 R'/oegs);
+            $res = ($del1 =~ s/\b(\d+)\s{1,2}\d+\s{1,2}R\b/xform() . ' 0 R'/oegs);
             if ($res)
             { $$$robj[oKIDS] = 1; }            
             if ($action eq 'print')
@@ -3683,7 +3677,7 @@ sub getPage
             else
             {  $$$robj[oPOS] = 0;
             }
-            $res = ($objektet =~ s/\b(\d+) \d+ R\b/xform() . ' 0 R'/oegs);
+            $res = ($objektet =~ s/\b(\d+)\s{1,2}\d+\s{1,2}R\b/xform() . ' 0 R'/oegs);
             if ($res)
             { $$$robj[oKIDS] = 1; }
             if ($objektet =~ m'/Subtype\s*/Image'so)
@@ -3772,19 +3766,19 @@ sub getPage
        }
        if (defined $AcroForm)
        {   @$$ref[iACROFORM] = $AcroForm;
-           $AcroForm =~ s/\b(\d+) \d+ R\b/xform() . ' 0 R'/oegs;
+           $AcroForm =~ s/\b(\d+)\s{1,2}\d+\s{1,2}R\b/xform() . ' 0 R'/oegs;
        }
        if (defined $AARoot)
        {   @$$ref[iAAROOT] = $AARoot;
-           $AARoot =~ s/\b(\d+) \d+ R\b/xform() . ' 0 R'/oegs;
+           $AARoot =~ s/\b(\d+)\s{1,2}\d+\s{1,2}R\b/xform() . ' 0 R'/oegs;
        }
        if (defined $AAPage)
        {   @$$ref[iAAPAGE] = $AAPage;
-           $AAPage =~ s/\b(\d+) \d+ R\b/xform() . ' 0 R'/oegs;
+           $AAPage =~ s/\b(\d+)\s{1,2}\d+\s{1,2}R\b/xform() . ' 0 R'/oegs;
        }
        if (defined $Annots)
        {   @$$ref[iANNOTS] = $Annots;
-           $Annots =~ s/\b(\d+) \d+ R\b/xform() . ' 0 R'/oegs;
+           $Annots =~ s/\b(\d+)\s{1,2}\d+\s{1,2}R\b/xform() . ' 0 R'/oegs;
        }
       
       while (scalar @skapa)
@@ -3801,7 +3795,7 @@ sub getPage
                $$$robj[oPOS]     = length($1);
                $$$robj[oSTREAMP] = length($1) + length($2) + length($3);
                   
-               $res = ($del1 =~ s/\b(\d+) \d+ R\b/xform() . ' 0 R'/oegs);
+               $res = ($del1 =~ s/\b(\d+)\s{1,2}\d+\s{1,2}R\b/xform() . ' 0 R'/oegs);
                if ($res)
                { $$$robj[oKIDS] = 1; }  
             }
@@ -3811,7 +3805,7 @@ sub getPage
                   $$$robj[oPOS] = $preLength;
                   $objektet = substr($objektet, $preLength);
                                  
-                  $res = ($objektet =~ s/\b(\d+) \d+ R\b/xform() . ' 0 R'/oegs);
+                  $res = ($objektet =~ s/\b(\d+)\s{1,2}\d+\s{1,2}R\b/xform() . ' 0 R'/oegs);
                   if ($res)
                   { $$$robj[oKIDS] = 1; }
                 }
@@ -3858,17 +3852,13 @@ sub kolla
      $formBox[3] = $4;
    }
   
-   if ($obj =~ m'/Rotate\s+(\d+)'so)
-   { $formRot = $1;
-   }
-
    if ($obj =~ m'/Contents\s+(\d+)'so)
    { $formCont = $1;
      $valid    = 1;
    }
    
    if ($obj =~ m'^(.+/Resources)'so)
-   {  if ($obj =~ m'Resources(\s+\d+ \d+ R)'os)   # Hänvisning
+   {  if ($obj =~ m'Resources(\s+\d+\s{1,2}\d+\s{1,2}R)'os)   # Hänvisning
       {  $resources = $1; }
       else                 # Resurserna är ett dictionary. Hela kopieras
       {  my $dummy;
@@ -3903,8 +3893,8 @@ sub byggForm
 {  no warnings; 
    my ($infil, $sidnr) = @_;
    
-   my ($res, $corr, $nyDel1, $formRes, $del1, $del2, $kids, $typ);
-   undef $nr;
+   my ($res, $corr, $nyDel1, $formRes, $del1, $del2, $kids, $typ, $nr,
+       $utrad);
       
    my $fSource = $infil . '_' . $sidnr;
    my @stati = stat($infil);
@@ -3992,7 +3982,7 @@ sub byggForm
        
        ($del1, $del2, $kids, $typ) = getKnown(\$form{$fSource},$key);
 
-       $$del1 =~ s/\b(\d+) \d+ R\b/translate() . ' 0 R'/oegs;
+       $$del1 =~ s/\b(\d+)\s{1,2}\d+\s{1,2}R\b/translate() . ' 0 R'/oegs;
        
        if (defined $$del2)          
        {  $utrad = "$nr 0 obj\n<<" . $$del1 . $$del2;
@@ -4046,7 +4036,7 @@ sub byggForm
                  $form{$fSource}->[fBBOX]->[3]  . ' ]' .  
                  # "\]/Matrix \[ $sX 0 0 $sX $tX $tY \]" .
                  $$del1;
-   $nyDel1 =~ s/\b(\d+) \d+ R\b/translate() . ' 0 R'/oegs;
+   $nyDel1 =~ s/\b(\d+)\s{1,2}\d+\s{1,2}R\b/translate() . ' 0 R'/oegs;
 
    $utrad = "$nr 0 obj" . $nyDel1 . $$del2;
    
@@ -4069,8 +4059,7 @@ sub getImage
    } 
    
    @skapa = ();
-   undef $nr;
-   my ($res, $corr, $nyDel1, $del1, $del2);
+   my ($res, $corr, $nyDel1, $del1, $del2, $nr, $utrad);
    my $fSource = $infil . '_' . $sidnr;
    my $iSource = $fSource . '_' . $bildnr;
   
@@ -4111,7 +4100,7 @@ sub getImage
 
    ($del1, $del2) = getKnown(\$form{$fSource}, $key);
 
-   $$del1 =~ s/\b(\d+) \d+ R\b/xform() . ' 0 R'/oegs;      
+   $$del1 =~ s/\b(\d+)\s{1,2}\d+\s{1,2}R\b/xform() . ' 0 R'/oegs;      
    if (defined $$del2)
    {  $utrad = "$nr 0 obj\n<<" . $$del1 . $$del2;
    }
@@ -4131,7 +4120,7 @@ sub getImage
 
          ($del1, $del2) = getKnown(\$form{$fSource}, $gammal);
 
-         $$del1 =~ s/\b(\d+) \d+ R\b/xform() . ' 0 R'/oegs;      
+         $$del1 =~ s/\b(\d+)\s{1,2}\d+\s{1,2}R\b/xform() . ' 0 R'/oegs;      
          if (defined $$del2)
          {  $utrad = "$ny 0 obj\n<<" . $$del1 . $$del2;
          }
@@ -4163,7 +4152,7 @@ sub AcroFormsEtc
    undef $AcroForm;
    @skapa = ();
    
-   my ($res, $corr, $nyDel1, @objData, $del1, $del2);
+   my ($res, $corr, $nyDel1, @objData, $del1, $del2, $utrad);
    my $fSource = $infil . '_' . $sidnr;
    
    if (exists $processed{$infil})
@@ -4200,20 +4189,20 @@ sub AcroFormsEtc
          
    if (defined $intAct{$fSource}[iACROFORM])
    {   $AcroForm = $intAct{$fSource}[iACROFORM];
-       $AcroForm =~ s/\b(\d+) \d+ R/xform() . ' 0 R'/oeg;
+       $AcroForm =~ s/\b(\d+)\s{1,2}\d+\s{1,2}R\b/xform() . ' 0 R'/oegs;
    }
    if (defined $intAct{$fSource}[iAAROOT])
    {  $AARoot = $intAct{$fSource}[iAAROOT];
-      $AARoot =~ s/\b(\d+) \d+ R/xform() . ' 0 R'/oeg;
+      $AARoot =~ s/\b(\d+)\s{1,2}\d+\s{1,2}R\b/xform() . ' 0 R'/oegs;
    }
    
    if (defined $intAct{$fSource}[iAAPAGE])
    {   $AAPage = $intAct{$fSource}[iAAPAGE];
-       $AAPage =~ s/\b(\d+) \d+ R/xform() . ' 0 R'/oeg;
+       $AAPage =~ s/\b(\d+)\s{1,2}\d+\s{1,2}R\b/xform() . ' 0 R'/oegs;
    }
    if (defined $intAct{$fSource}[iANNOTS])
    {   $Annots = $intAct{$fSource}[iANNOTS];
-       $Annots =~ s/\b(\d+) \d+ R/xform() . ' 0 R'/oeg;
+       $Annots =~ s/\b(\d+)\s{1,2}\d+\s{1,2}R\b/xform() . ' 0 R'/oegs;
    }
 
    ##################################
@@ -4233,7 +4222,7 @@ sub AcroFormsEtc
          {  $res = sysseek INFIL, ($objData[0] + $$oD[oPOS]), 0;
             $corr = sysread INFIL, $del1, ($$oD[oSTREAMP] - $$oD[oPOS]) ;
             if (defined  $$oD[oKIDS]) 
-            {   $del1 =~ s/\b(\d+) \d+ R\b/xform() . ' 0 R'/oegs;
+            {   $del1 =~ s/\b(\d+)\s{1,2}\d+\s{1,2}R\b/xform() . ' 0 R'/oegs;
             }
             $res = sysread INFIL, $del2, ($objData[1] - $corr); 
             $utrad = "$ny 0 obj\n<<" . $del1 . $del2;
@@ -4242,7 +4231,7 @@ sub AcroFormsEtc
          {  $del1 = getObject($gammal);
             $del1 = substr($del1, $$oD[oPOS]);
             if (defined  $$oD[oKIDS])
-            {   $del1 =~ s/\b(\d+) \d+ R\b/xform() . ' 0 R'/oegs;
+            {   $del1 =~ s/\b(\d+)\s{1,2}\d+\s{1,2}R\b/xform() . ' 0 R'/oegs;
             }
             $utrad = "$ny 0 obj " . $del1;
          }
@@ -4264,9 +4253,8 @@ sub AcroFormsEtc
 sub extractName
 {  my ($infil, $sidnr, $namn) = @_;
    
-   my ($res, $del1, $resType, $key, $corr, $formRes, $kids);
+   my ($res, $del1, $resType, $key, $corr, $formRes, $kids, $nr, $utrad);
    my $del2 = '';
-   undef $nr;
    @skapa = ();
    if (exists $processed{$infil})
    {  %old = %{$processed{$infil}};
@@ -4310,7 +4298,7 @@ sub extractName
    $formRes = $form{$fSource}->[fRESOURCE];
    
    if ($formRes !~ m'<<.*>>'os)                   # If not a directory, get it
-   {   if ($formRes =~ m'\b(\d+) \d+ R'o)
+   {   if ($formRes =~ m'\b(\d+)\s{1,2}\d+\s{1,2}R'o)
        {  $key   = $1;
           $formRes = getKnown(\$form{$fSource}, $key);
        }
@@ -4322,14 +4310,14 @@ sub extractName
    while ($formRes =~ m'\/(\w+)\s*\<\<([^>]+)\>\>'osg)
    {   $resType = $1;
        my $str  = $2;
-       if ($str =~ m|$namn (\d+) \d+ R|s)
+       if ($str =~ m|$namn\s+(\d+)\s{1,2}\d+\s{1,2}R|s)
        {   $key = $1;
            last;
        }
    }
    if (! defined $key)                      # Try to expand the references
    {   my ($str, $del1, $del2);
-       while ($formRes =~ m'(\/\w+)\s+(\d+) \d+ R'ogs)
+       while ($formRes =~ m'(\/\w+)\s+(\d+)\s{1,2}\d+\s{1,2}R'ogs)
        { $str .= $1 . ' ';
          ($del1, $del2) = getKnown(\$form{$fSource}, $2);
          my $string =  $$del1;
@@ -4339,7 +4327,7 @@ sub extractName
        while ($formRes =~ m'\/(\w+)\s*\<\<([^>]+)\>\>'osg)
        {   $resType = $1;
            my $str  = $2;
-           if ($str =~ m|$namn (\d+) \d+ R|s)
+           if ($str =~ m|$namn (\d+)\s{1,2}\d+\s{1,2}R|s)
            {   $key = $1;
                last;
            }
@@ -4409,7 +4397,7 @@ sub extractName
       $objRef{$namn} = $nr;
    }
 
-   $$del1 =~ s/\b(\d+) \d+ R/xform() . ' 0 R'/oeg;
+   $$del1 =~ s/\b(\d+)\s{1,2}\d+\s{1,2}R\b/xform() . ' 0 R'/oegs;
 
    if (defined $$del2)
    {  $utrad = "$nr 0 obj\n<<" . $$del1 . $$del2;
@@ -4433,7 +4421,7 @@ sub extractName
          
          ($del1, $del2, $kids) = getKnown(\$form{$fSource}, $gammal);
          
-         $$del1 =~ s/\b(\d+) \d+ R\b/xform() . ' 0 R'/oegs 
+         $$del1 =~ s/\b(\d+)\s{1,2}\d+\s{1,2}R\b/xform() . ' 0 R'/oegs
                                      unless (! defined $kids);      
          if (defined $$del2)
          {  $utrad = "$ny 0 obj\n<<" . $$del1 . $$del2;
@@ -4459,9 +4447,8 @@ sub extractObject
 {  no warnings;
    my ($infil, $sidnr, $key, $typ) = @_;
    
-   my ($res, $del1, $corr, $namn, $kids);
+   my ($res, $del1, $corr, $namn, $kids, $nr, $utrad);
    my $del2 = '';
-   undef $nr;
    @skapa = ();
 
    if (exists $processed{$infil})
@@ -4566,7 +4553,7 @@ sub extractObject
       $objRef{$namn} = $nr;
    }
 
-   $$del1 =~ s/\b(\d+) \d+ R\b/xform() . ' 0 R'/oegs 
+   $$del1 =~ s/\b(\d+)\s{1,2}\d+\s{1,2}R\b/xform() . ' 0 R'/oegs 
                                   unless (! defined $kids);      
    if (defined $$del2)
    {  $utrad = "$nr 0 obj\n<<" . $$del1 . $$del2;
@@ -4591,7 +4578,7 @@ sub extractObject
          
          ($del1, $del2, $kids) = getKnown(\$form{$fSource}, $gammal);
 
-         $$del1 =~ s/\b(\d+) \d+ R\b/xform() . ' 0 R'/oegs
+         $$del1 =~ s/\b(\d+)\s{1,2}\d+\s{1,2}R\b/xform() . ' 0 R'/oegs
                                  unless (! defined  $kids);
        
          if (defined $$del2)          
@@ -4616,8 +4603,9 @@ sub extractObject
 ##########################################
 
 sub analysera
-{  my ($i, $res, @underObjekt, @sidObj, 
-       $strPos, $sidor, $filId, $Root, $del1, $del2);
+{  my $infil = shift;
+   my ($i, $res, @underObjekt, @sidObj, $vektor,
+       $strPos, $sidor, $filId, $Root, $del1, $del2, $utrad);
 
    my $sidAcc = 0;
    @skapa     = ();
@@ -4629,7 +4617,6 @@ sub analysera
    {  %old = ();
    }
              
-   undef $obj;
    undef $AcroForm;
    undef $Annots;
    undef $Names;
@@ -4651,7 +4638,7 @@ sub analysera
    if ($lastFile ne $infil)
    {  %oldObject = ();
       %unZipped  = ();
-      $root      = xRefs($stati[7]);
+      $root      = xRefs($stati[7], $infil);
       $lastFile  = $infil;
    }   
    #############
@@ -4663,10 +4650,10 @@ sub analysera
    my $objektet = getObject($root);
    
    if (! $interActive)
-   {  if ($objektet =~ m'/AcroForm(\s+\d+ \d+ R)'so)
+   {  if ($objektet =~ m'/AcroForm(\s+\d+\s{1,2}\d+\s{1,2}R)'so)
       {  $AcroForm = $1;
       }      
-      if ($objektet =~ m'/Names\s+(\d+) \d+ R'so)
+      if ($objektet =~ m'/Names\s+(\d+)\s{1,2}\d+\s{1,2}R'so)
       {  $Names = $1;
       }
       if ((scalar %fields) || (scalar @jsfiler) || (scalar @inits))
@@ -4679,7 +4666,7 @@ sub analysera
       #################################################
       #  Finns ett dictionary för Additional Actions ?
       #################################################
-      if ($objektet =~ m'/AA(\s+\d+ \d+ R)'os)   # Hänvisning
+      if ($objektet =~ m'/AA(\s+\d+\s{1,2}\d+\s{1,2}R)'os)   # Hänvisning
       {  $AARoot = $1; }
       elsif ($objektet =~ m'/AA\s*\<\<\s*[^\>]+[^\>]+'so) # AA är ett dictionary
       {  my $k;
@@ -4707,7 +4694,7 @@ sub analysera
    # Hitta pages
    #
  
-   if ($objektet =~ m'/Pages\s+(\d+) \d+ R'os)
+   if ($objektet =~ m'/Pages\s+(\d+)\s{1,2}\d+\s{1,2}R'os)
    {  $objektet = getObject($1);
       if ($objektet =~ m'/Count\s+(\d+)'os)
       {  $sidor = $1; }   
@@ -4720,7 +4707,7 @@ sub analysera
 
    if ($objektet =~ m'/Kids\s*\[([^\]]+)'os)
    {  $vektor = $1;  
-      while ($vektor =~ m'(\d+) \d+ R'go)
+      while ($vektor =~ m'(\d+)\s{1,2}\d+\s{1,2}R'go)
       {   push @sidObj, $1;       
       }
       $li++;
@@ -4734,7 +4721,7 @@ sub analysera
           if ($objektet =~ m'/Kids\s*\[([^\]]+)'os)
           {  $vektor = $1; 
              my @sObj; 
-             while ($vektor =~ m'(\d+) \d+ R'go)
+             while ($vektor =~ m'(\d+)\s{1,2}\d+\s{1,2}R'go)
              {   push @sObj, $1;       
              }
              $li++;
@@ -4751,10 +4738,10 @@ sub analysera
    }
    
    if (defined $AcroForm)
-   {  $AcroForm =~ s/\b(\d+) \d+ R\b/xform() . ' 0 R'/oegs;
+   {  $AcroForm =~ s/\b(\d+)\s{1,2}\d+\s{1,2}R\b/xform() . ' 0 R'/oegs;
    }
    if (defined $AARoot)
-   {  $AARoot =~ s/\b(\d+) \d+ R\b/xform() . ' 0 R'/oegs;
+   {  $AARoot =~ s/\b(\d+)\s{1,2}\d+\s{1,2}R\b/xform() . ' 0 R'/oegs;
    }
    
    while (scalar @skapa)
@@ -4768,7 +4755,7 @@ sub analysera
          if ($objektet =~ m'^(\d+ \d+ obj\s*<<)(.+)(>>\s*stream)'os)
          {  $del1 = $2;
             $strPos = length($2) + length($3) + length($1);
-            $del1 =~ s/\b(\d+) \d+ R\b/xform() . ' 0 R'/oegs;
+            $del1 =~ s/\b(\d+)\s{1,2}\d+\s{1,2}R\b/xform() . ' 0 R'/oegs;
             $objekt[$ny] = $pos;
             $utrad = "$ny 0 obj\n<<" . "$del1" . '>>stream';
             $del2   = substr($objektet, $strPos);
@@ -4781,7 +4768,7 @@ sub analysera
             {  my $preLength = length($1);
                $objektet = substr($objektet, $preLength);
             }
-            $objektet =~ s/\b(\d+) \d+ R\b/xform() . ' 0 R'/oegs;
+            $objektet =~ s/\b(\d+)\s{1,2}\d+\s{1,2}R\b/xform() . ' 0 R'/oegs;
             $objekt[$ny] = $pos;
             $utrad = "$ny 0 obj\n$objektet";
             $pos += syswrite UTFIL, $utrad;
@@ -4790,24 +4777,24 @@ sub analysera
   }
   close INFIL;
   %{$processed{$infil}} = %old;
-  1;
+  return $sidor;
 }
 
 sub sidAnalys
 {  my ($oNr, $obj) = @_;
-   my ($ny, $strPos, $spar, $closeProc, $del1, $del2);
+   my ($ny, $strPos, $spar, $closeProc, $del1, $del2, $utrad);
 
    if (! $parents[0])
    { $objNr++;
      $parents[0] = $objNr;
    }
-   $parent = $parents[0];
+   my $parent = $parents[0];
    $objNr++;
    $ny = $objNr; 
 
    $old{$oNr} = $ny;
      
-   if ($obj =~ m'/Parent\s+(\d+) \d+ R\b'os)
+   if ($obj =~ m'/Parent\s+(\d+)\s{1,2}\d+\s{1,2}R\b'os)
    {  $old{$1} = $parent;
    }
    
@@ -4820,14 +4807,14 @@ sub sidAnalys
    {  $del1 = $1;
    }
    if (! $taInterAkt)
-   {  $del1 =~ s?\s*/Annots\s+\d+ \d+ R??os;
+   {  $del1 =~ s?\s*/Annots\s+\d+\s{1,2}\d+\s{1,2}R??os;
       $del1 =~ s?\s*/AA\s*<<[^>]*>>??os;
    }
    
-   $del1 =~ s/\b(\d+) \d+ R\b/xform() . ' 0 R'/oegs;
+   $del1 =~ s/\b(\d+)\s{1,2}\d+\s{1,2}R\b/xform() . ' 0 R'/oegs;
 
    $utrad = "$ny 0 obj\n<<$del1\n" . '>>';
-   if (defined $$del2)
+   if (defined $del2)
    {   $utrad .= "stream\n$del2";
    }
    else
@@ -4856,7 +4843,7 @@ sub translate
 sub behandlaNames
 {  my ($namnObj, $iForm) = @_;
    
-   my ($low, $high, $antNod0, $entry, $nyttNr, $ny, 
+   my ($low, $high, $antNod0, $entry, $nyttNr, $ny, $obj,
        $fObjnr, $offSet, $bytes, $res, $key, $func, $corr, @objData);
    my (@nod0, @nodUpp, @kid, @soek, %nytt);
    
@@ -4870,7 +4857,7 @@ sub behandlaNames
 
           if ($objektet =~ m'<<(.+)>>'ogs)
           { $objektet = $1; }
-          if ($objektet =~ s'/JavaScript\s+(\d+) \d+ R''os)
+          if ($objektet =~ s'/JavaScript\s+(\d+)\s{1,2}\d+\s{1,2}R''os)
           {  my $byt = $1; 
              push @kid, $1;
              while (scalar @kid)
@@ -4881,7 +4868,7 @@ sub behandlaNames
                    if ($obj =~ m'/Kids\s*\[([^]]+)'ogs)
                    {  $vektor = $1;
                    }
-                   while ($vektor =~ m'\b(\d+) \d+ R\b'ogs)
+                   while ($vektor =~ m'\b(\d+)\s{1,2}\d+\s{1,2}R\b'ogs)
                    {  push @kid, $1;
                    }
                    $vektor = '';
@@ -4899,7 +4886,7 @@ sub behandlaNames
       {  $objektet = getObject($namnObj);             
          if ($objektet =~ m'<<(.+)>>'ogs)
          {  $objektet = $1; }
-         if ($objektet =~ s'/JavaScript\s+(\d+) \d+ R''os)
+         if ($objektet =~ s'/JavaScript\s+(\d+)\s{1,2}\d+\s{1,2}R''os)
          {  my $byt = $1; 
             push @kid, $1;
             while (scalar @kid)
@@ -4910,7 +4897,7 @@ sub behandlaNames
                   if ($obj =~ m'/Kids\s*\[([^]]+)'ogs)
                   {  $vektor = $1;
                   }
-                  while ($vektor =~ m'\b(\d+) \d+ R\b'ogs)
+                  while ($vektor =~ m'\b(\d+)\s{1,2}\d+\s{1,2}R\b'ogs)
                   {  push @kid, $1;
                   }
                   undef $vektor;
@@ -4957,13 +4944,15 @@ sub behandlaNames
    }
      
    if (scalar %fields)
-   {  $fObjnr = defLadda();
-      push @inits, 'Ladda();';
-      $script{'Ladda'} = $fObjnr;
-      $nytt{'Ladda'} = $fObjnr;
+   {  push @inits, 'Ladda();';
+      $fObjnr = defLadda();
+      if ($duplicateInits)
+      {  $script{'Ladda'} = $fObjnr;
+         $nytt{'Ladda'} = $fObjnr;
+      }
    }
 
-   if (scalar @inits)
+   if ((scalar @inits) && ($duplicateInits))
    {  $fObjnr = defInit();
       $script{'Init'} = $fObjnr;
       $nytt{'Init'} = $fObjnr;
@@ -5049,8 +5038,8 @@ sub behandlaNames
       
   
    $ny = $objNr;
-   $objektet =~ s|\s*/JavaScript\s*\d+ \d+ R||os;
-   $objektet =~ s/\b(\d+) \d+ R\b/xform() . ' 0 R'/oegs;
+   $objektet =~ s|\s*/JavaScript\s*\d+\s{1,2}\d+\s{1,2}R||os;
+   $objektet =~ s/\b(\d+)\s{1,2}\d+\s{1,2}R\b/xform() . ' 0 R'/oegs;
    if (scalar %script)
    {  $objektet .= "\n/JavaScript $ny 0 R\n";
    }
@@ -5075,30 +5064,19 @@ sub quickxform
 
 
 sub skrivKedja
-{  my $spar;
-   my $func;
+{  my $code = ' ';
    
-   $objNr++;
-   $objekt[$objNr] = $pos;
-     
-   my $obj = "$objNr 0 obj\n<<\n/S /JavaScript\n/JS " . '('; 
-   for $func (values %initScript)
-   {   $func =~ s'\('\\('gso;
-       $func =~ s'\)'\\)'gso;
-       $obj .= $func . "\n";
+   for (values %initScript)
+   {   $code .= $_ . "\n";
    }
-   $obj .='function Init\(\)\r{\r';
-   $obj .= 'if \(typeof this.info.ModDate == "object"\)\r{ return true; }\r'; 
-   my $act;
-   for $act  (@inits)
-   {  $obj .= "\n" . $act;
+   $code .= "function Init()\r{\r";
+   $code .= 'if (typeof this.info.ModDate == "object")' . "\r{ return true; }\r"; 
+   for (@inits)
+   {  $code .= $_ . "\n";
    }
-   $obj .= '}\r Init\(\); ';
+   $code .= "}\r Init(); ";
 
-   $obj .= ')';
-   $spar = $objNr;
-   $obj .= "\n>>\nendobj\n";
-   $pos += syswrite UTFIL, $obj;
+   my $spar = skrivJS($code);
    undef @inits;
    undef %initScript;
    return $spar;
@@ -5108,12 +5086,29 @@ sub skrivKedja
 
 sub skrivJS
 {  my $kod = shift;
-   $objNr++;
-   $objekt[$objNr] = $pos;
-   $kod =~ s'\('\\('gso;
-   $kod =~ s'\)'\\)'gso;
-   $obj = "$objNr 0 obj\n<<\n/S /JavaScript\n/JS " . '(' . $kod . ')';
-   $obj .= "\n>>\nendobj\n";
+   my $obj;
+   if (($compress) && (length($kod) > 99))
+   {  $objNr++;
+      $objekt[$objNr] = $pos;
+      my $spar = $objNr;
+      $kod = compress($kod);
+      my $langd = length($kod);
+      $obj = "$objNr 0 obj<</Filter/FlateDecode"
+                           .  "/Length $langd>>stream\n" . $kod 
+                           .  "\nendstream\nendobj\n";
+      $pos += syswrite UTFIL, $obj;
+      $objNr++;
+      $objekt[$objNr] = $pos;
+      $obj = "$objNr 0 obj<</S /JavaScript\n/JS $spar 0 R >>endobj\n";
+   }
+   else
+   {  $kod =~ s'\('\\('gso;
+      $kod =~ s'\)'\\)'gso;
+      $objNr++;
+      $objekt[$objNr] = $pos;
+      $obj = "$objNr 0 obj<</S /JavaScript\n/JS " . '(' . $kod . ')';
+      $obj .= "\n>>\nendobj\n";
+   }
    $pos += syswrite UTFIL, $obj;           
    return $objNr;
 }
@@ -5142,41 +5137,32 @@ sub inkludera
 
 
 sub defLadda
-{  $objNr++;
-   my $ny = $objNr;
-   $objekt[$ny] = $pos;
-   $obj = "$ny 0 obj\n<<\n/S /JavaScript\n/JS " . '(function Ladda\(\)\r';
-   my $varde = 'function Ladda()\r{\r';
-   $obj .= '{\r';
-   my $key;
-   for $key  (keys %fields)
-   {  $varde .= "if (this.getField('$key')) this.getField('$key').value = '$fields{$key}';\r";
-      $obj   .= "if \\(this.getField\\('$key'\\)\\) this.getField\\('$key'\\).value = '$fields{$key}';\r";
+{  my $code = "function Ladda()\r{\r";
+   for (keys %fields)
+   {  $code .= "if (this.getField('$_')) this.getField('$_').value = '$fields{$_}';\r";
+   }  
+   $code .= " 1;}\r";   
+   $initScript{'Ladda'} = $code;
+   if ($duplicateInits) 
+   {  my $ny = skrivJS($code);        
+      return $ny;
    }
-   $varde .= ' 1;}\r ';
-   $obj .= ' 1;}\r )';
-   $obj .= "\n>>\nendobj\n";
-   $pos += syswrite UTFIL, $obj;
-   $initScript{'Ladda'} = $varde;           
-   return $ny;
+   else
+   {  return 1;
+   }
 }
 
 sub defInit
-{  $objNr++;
-   my $ny = $objNr;
-   $objekt[$ny] = $pos;
-   $obj = "$ny 0 obj\n<<\n/S /JavaScript\n/JS " . '(function Init\(\)\r{\r';
-   $obj .= 'if \(typeof this.info.ModDate == "object"\)\r{ return true; }\r'; 
-   my $act;
-   for $act  (@inits)
-   {  $act =~ s'\('\\('gso;
-      $act =~ s'\)'\\)'gso;
-      $obj .= "\n" . $act;
+{  my $code = "function Init()\r{\r";
+   $code .= 'if (typeof this.info.ModDate == "object")' . "\r{ return true; }\r"; 
+   for (@inits)
+   {  $code .= $_ . "\n";
    }
-   $obj .= '}\r)';
-   $obj .= "\n>>\nendobj\n";
-   $pos += syswrite UTFIL, $obj;           
+   $code .= '}';
+             
+   my $ny = skrivJS($code);        
    return $ny;
+
 }
 
 
@@ -5204,7 +5190,7 @@ sub errLog
     my $lpos = $pos || 'undef';
     my $lobjNr = $objNr || 'undef';
     my $lutfil = $utfil || 'undef';
-    my $linfil = $infil || 'undef';
+    
     my $lrunfil = $runfil || 'undef'; 
     open (ERRLOG, ">$errLog") || croak "$mess can't open an error logg, $!";
     print ERRLOG "\n$mess\n\n";
@@ -5213,7 +5199,6 @@ sub errLog
     print ERRLOG "   Bytes written to the current pdf-file,    pos    = $lpos\n";
     print ERRLOG "   Object processed, not necessarily written objNr  = $lobjNr\n";
     print ERRLOG "   Current pdf-file,                         utfil  = $lutfil\n";
-    print ERRLOG "   Last input file,                          infil  = $linfil\n";
     print ERRLOG "   File logging the run,                     runfil = $lrunfil\n";
     print ERRLOG "   Local time                                       = $now\n"; 
     print ERRLOG "\n\n";    
