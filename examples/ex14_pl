@@ -1,0 +1,45 @@
+    # ex14_pl
+
+    use PDF::Reuse;
+    use strict;
+
+    my $y    = 59.76;                  # Margin at the bottom
+    my $col1 = 43;                     # First column    
+    my $col2 = 296;                    # Second column
+    my $step = 145.126;                # Height of the card
+    my $string;
+
+    prDocDir("doc");
+    prFile('BizCard.pdf');
+
+    my @vec = prForm ( {file   => 'myFile.pdf', # Add the form definitions
+                        effect => 'add' }       # and get data about the form
+                     );
+    ###########################################################################
+    # The list from prForm contains $internalName, $lowerLeftX, $lowerLeftY,
+    # $upperRightX, $upperRightY, $numberOfImages
+    ###########################################################################
+
+    my $form = $vec[0];                       
+    my $xScale = 253.2584 / ($vec[3] - $vec[1]);
+    my $yScale = 145.126 / ($vec[4] - $vec[2]);
+    if ($xScale < $yScale)
+    {  $yScale = $xScale;
+    }
+    else
+    {  $xScale = $yScale;
+    }
+    while ($y < 720)
+    {   $string .= "q\n";
+        $string .= "$xScale 0 0 $yScale $col1 $y cm\n";  # scale and "move to" 
+        $string .= "/$form Do\n";
+        $string .= "Q\n";
+        $string .= "q\n";
+        $string .= "$xScale 0 0 $yScale $col2 $y cm\n";  # scale and "move to"
+        $string .= "/$form Do\n";
+        $string .= "Q\n";
+        $y += $step;
+    }
+    prAdd($string);   
+    prEnd();
+ 

@@ -1,0 +1,17 @@
+   # ex12_pl
+
+   use PDF::Reuse;
+   use strict;
+
+   prFile('doc/ex12.pdf');
+   prMoveTo(75, 645);
+   prScale(0.6, 0.6);
+   prImage( 
+             {  file    => 'doc/letterB.pdf',
+                page    => 1,
+                imageNo => 1
+             } 
+          );
+    
+   prEnd();
+

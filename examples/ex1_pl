@@ -1,0 +1,7 @@
+   # ex1_pl
+
+   use PDF::Reuse;                       # Mandatory  
+   prFile('ex1.pdf');                    # File name is mandatory
+   prText(250, 650, 'Hello World !');       
+   prEnd();                              # Mandatory
+

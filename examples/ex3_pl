@@ -1,0 +1,15 @@
+    # ex3_pl
+
+    use PDF::Reuse;
+    use strict;                            
+
+    prDocDir('doc');                         
+
+    for (my $i = 1; $i < 1001; $i++)                 
+    {   prFile("short$i.pdf");
+        prFontSize(16);                      
+        prFont('Times-Bold');                          
+        prText(180, 650, 'This is the first and only page');                                                    
+    }
+    prEnd();
+

@@ -1,0 +1,21 @@
+   # ex23_pl
+
+   use PDF::Reuse;
+   use Ean13;
+   use strict;
+
+   prFile('doc/ex23.pdf');
+
+   prMbox(0, 0, 690, 735);
+   prForm( { file   => 'EUSA.pdf',
+             adjust => 1 } );
+
+   my $e = Ean13->new();
+
+   $e->draw(x          => 70,
+            y          => 530,
+            value      => '1234567890123',
+            background => '1 1 1',
+            size       => 1.5);
+
+   prEnd();

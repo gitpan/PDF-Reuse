@@ -1,0 +1,10 @@
+   # ex15_pl
+
+   use PDF::Reuse;
+
+   prDocDir('doc');
+   prFile('Ex15.pdf');
+   prJs('script1.js');              # To include the JavaScript
+   prInit('nameAddress();');        # To call nameAddress(); at start up
+   prEnd();
+

@@ -1,0 +1,86 @@
+PDF/Reuse version 0.01
+======================
+
+This module gives you a possibility to reuse PDF-files. You can use pages,
+images, fonts and Acrobat JavaScript from old PDF-files (if they
+were not encrypted), and rearrange the components, and add new graphics,
+texts etc.
+
+There is also support for graphics. In the tutorial there is a description of
+how to transform a simple PDF-pages to graphic perl objects with the help of
+programs based on this module.
+
+The module is fairly fast, so it should be possible to used it for mass
+production. 
+
+Usage e.g. for a long list:
+
+   use PDF::Reuse;
+   use strict;
+
+   # Getting customer data in some way ...
+
+   my @custData = ( { firstName => 'Anders',
+                      lastName  => 'Wallberg' },
+                    { firstName => 'Nils',
+                      lastName  => 'Versen' },
+                    { firstName => 'Niclas',
+                      lastName  => 'Lindberg' },
+             
+                    # and 10000 more records
+
+                    { firstName => 'Sten',
+                      lastName  => 'Wernlund' } );
+
+   prFile('myFile.pdf');
+
+   for my $customer (@custData)
+   {    prForm('letter.pdf');
+        prText(50, 750, "Dear $customer->{'firstName'}");
+        # ...
+        prPage();
+   }
+   prEnd();
+
+
+
+INSTALLATION
+
+To install this module in a Windows environment:
+   
+   perl Makefile.PL
+   nmake
+   nmake test
+   nmake install
+
+(If you haven't got nmake, try to download it via
+http://download.microsoft.com/download/vc15/Patch/1.52/W95/EN-US/Nmake15.exe)
+
+
+Under other operating systems try the following:
+
+   perl Makefile.PL
+   make
+   make test
+   make install
+
+
+
+DEPENDENCIES
+
+This module requires these other modules:
+
+  Carp
+  Compress::Zlib
+  Digest::MD5
+  Exporter
+  SelfLoader
+
+
+COPYRIGHT AND LICENCE
+
+Copyright (C) 2003 Lars Lundberg, Solidez HB
+
+This library is free software; you can redistribute it and/or modify
+it under the same terms as Perl itself. 
+

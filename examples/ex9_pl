@@ -1,0 +1,18 @@
+   # ex9_pl
+   
+   use PDF::Reuse;
+   use strict vars;
+
+   my ($line, $routine, @elem);
+
+   chomp($line = <STDIN>); 
+  
+   while ($line)
+   {   @elem = split /~/, $line;
+       $routine = 'PDF::Reuse::' . (shift @elem);
+       for (@elem)
+       {  s'<tilde>'~'og;
+       }
+       &$routine (@elem);
+       chomp($line = <STDIN>) 
+   }

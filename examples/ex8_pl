@@ -1,0 +1,30 @@
+   # ex8_pl
+
+   use PDF::Reuse;
+   use Digest::MD5;
+   use strict vars;
+
+   my $line;
+   my $inFile = shift || 'run/ex7.pdf.dat';            # The name of the log
+
+   prDocDir('doc2');
+   prLogDir('run2');
+
+   open (INFILE, "<$inFile") || die "Couldn't open file $inFile, $! \n";
+
+   while (chomp($line = <INFILE>))
+   {   my @elem = split /~/, $line;
+       my $routine = 'PDF::Reuse::pr' .  (shift @elem);
+       for (@elem)
+       {  s'<tilde>'~'og;
+       }
+       if ($line eq 'Log~<S1>')
+       {  my $str2 = prGetLogBuffer() . '436';
+          my $str  = Digest::MD5::md5_hex($str2);
+          print "$str\n";
+       } 
+       &$routine (@elem); 
+   }
+
+   close INFILE;
+   prEnd();

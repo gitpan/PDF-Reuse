@@ -1,0 +1,22 @@
+   # ex19_pl
+
+   use PDF::Reuse;
+   use Histogram;
+   use strict;
+  
+   prFile('doc/ex19.pdf');
+   my $h = Histogram->new();
+
+   $h->values(400, 600, -200, 900, 240, 700, 125, 429, 235, 874);
+
+   ###################################
+   # Name to connect to each value
+   ###################################
+
+   $h->names('Söderblom', 'Alström', 'Junger', 'Larsson', 'Fält', 
+                'Ljung', 'Andersson', 'Persson', 'Qvist', 'Andreen');
+
+   $h->draw(x    => 10,
+            y    => 300,
+            size => 0.75);
+    prEnd();

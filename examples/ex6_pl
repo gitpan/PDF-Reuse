@@ -1,0 +1,60 @@
+    # ex6_pl
+
+    use PDF::Reuse;
+    use PDF::API2::Util;          
+    use strict;
+
+    my @c = namecolor('blue2');
+  
+    prFile('ReceiptSmall.pdf');
+    prCompress(1); 
+   
+    prForm( { file   => 'Receipt.pdf',              # Just to get the definitions
+              page   => 1,                          # from the page, and not to
+              effect => 'load' } );                 # add anything to the page
+
+    my $intName = prFont('FJIILK+Serpentine-Bold'); # "Extract" the font and get a
+                                                    # name to use in the stream 
+ 
+    my $string = "q\n";                             # save graphic state
+    $string   .= "BT\n";                            # Begin Text
+    $string   .= "/$intName 1 Tf\n";                # set font size 
+    $string   .= "40 0 0 40 85 784 Tm\n";           # set a text matrix
+    $string   .= "-0.05 Tc\n";                      # set character spacing
+    # $string   .= "0 Tw\n";                        # set word spacing
+    $string   .= "$c[0] $c[1] $c[2] rg\n";          # set color for filling
+    $string   .= "(Gigantic Electric Inc.) Tj\n";   # show text
+    $string   .= "ET\n";                            # End Text
+    $string   .= "Q\n";                             # restore graphic state
+
+    prAdd($string);                                  
+    
+    prFont('TR');
+    prFontSize(18);
+    prText(153, 758, 'Everything electrical for home and office');
+    prText(167, 702, 'Receipt');
+    prFontSize(14);
+    prText(120, 665, 'Customer');
+    prText(120, 649, 'Address');
+    prText(120, 633, 'City');
+    prText(120, 617, 'Phone');
+    prText(335, 665, 'Seller');
+    prText(335, 649, 'Cashier');
+    prText( 78, 568, 'Item');
+    prText(445, 568, 'Sum');
+    prText(508, 568, 'Delivery');
+    prAdd("q 0 95 m 700 95 l S Q");                  # draw a horizontal line
+    prFontSize(9);
+    prText(72, 79, 'Main Office');
+    prText(72, 69, 'Box 99999');
+    prText(72, 59, 'Stora Allén 99');
+    prText(72, 49, 'SE-19999 Stockholm');
+    prText(72, 39, 'Phone +46-8-99999999');
+    prText(264, 79, 'Shop (This Subsidiary)');
+    prText(264, 59, 'Breda Allén 99');
+    prText(264, 49, 'SE-15999 Skärholmen');
+    prText(264, 39, 'Phone +46-8-19999999');
+    prText(432, 79, 'VAT SE-559999-9999');
+
+    prEnd();
+

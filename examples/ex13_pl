@@ -1,0 +1,15 @@
+   # ex13_pl
+
+    use PDF::Reuse;
+    use strict;
+
+    prFile('doc/ex13.pdf');
+    prForm('ex1.pdf');
+    prText(100, 500, 'This is put on the first page');
+    prPage();
+    prDoc('doc/piped.pdf');
+    prPage();
+    prForm('ex1.pdf');
+    prText(100, 500, 'This is put on the last page');
+
+    prEnd();
