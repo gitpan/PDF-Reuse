@@ -4,14 +4,13 @@
    use strict;
 
    prFile('doc/ex12.pdf');
-   prMoveTo(75, 645);
-   prScale(0.6, 0.6);
-   prImage( 
-             {  file    => 'doc/letterB.pdf',
-                page    => 1,
-                imageNo => 1
-             } 
-          );
+   
+   prImage(  { file    => 'doc/letterB.pdf',
+               page    => 1,
+               imageNo => 1,
+               x       => 75,
+               y       => 645,
+               size    => 0.6 }  );
     
    prEnd();
 

@@ -1,5 +1,9 @@
 Revision history for Perl extension PDF::Reuse.
 
+0.18  Tue Nov 11 2003
+      Several new parameters for forms and images, so they can be resized, moved
+     and rotated. 
+
 0.17  Sat Nov 1 2003
      A bug removed. The module sometimes got confused when it was reconstructing
      forms and was switching between different files. This was an error 

@@ -7,8 +7,7 @@
     my $col1 = 43;                     # First column    
     my $col2 = 296;                    # Second column
     my $step = 145.126;                # Height of the card
-    my $string;
-
+    
     prDocDir("doc");
     prFile('BizCard.pdf');
 
@@ -30,16 +29,20 @@
     {  $xScale = $yScale;
     }
     while ($y < 720)
-    {   $string .= "q\n";
-        $string .= "$xScale 0 0 $yScale $col1 $y cm\n";  # scale and "move to" 
-        $string .= "/$form Do\n";
-        $string .= "Q\n";
-        $string .= "q\n";
-        $string .= "$xScale 0 0 $yScale $col2 $y cm\n";  # scale and "move to"
-        $string .= "/$form Do\n";
-        $string .= "Q\n";
+    {   prForm ( {file   => 'myFile.pdf',
+                  x      => $col1,
+                  y      => $y,
+                  xsize  => $xScale,
+                  ysize  => $yScale });
+
+        prForm ( {file   => 'myFile.pdf',
+                  x      => $col2,
+                  y      => $y,
+                  xsize  => $xScale,
+                  ysize  => $yScale });
+        
         $y += $step;
     }
-    prAdd($string);   
+       
     prEnd();
  

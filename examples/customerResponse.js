@@ -41,8 +41,9 @@ function nameAddress(page, xpos, ypos)
 	   myRec[2] = myRec[0] + 140;             // length of the fill-in field
 
 	   var tf1         = this.addField(labelText[i], "text", thePage, myRec);
-	   tf1.fillColor   = color.ltGray;
-	   tf1.textColor   = color.black;
+	   tf1.fillColor   = ["RGB", 1, 1, 0.94];
+      tf1.strokeColor = ["RGB", 0.7, 0.7, 0.6];
+      tf1.textColor   = color.black;
       tf1.borderStyle = border.s;
 	   tf1.textSize    = 12;
       tf1.display     = display.visible;

@@ -16,7 +16,7 @@ use autouse 'Compress::Zlib' => qw(compress($)
 use autouse 'Data::Dumper'   => qw(Dumper);
 use AutoLoader qw(AUTOLOAD);
 
-our $VERSION = '0.17';
+our $VERSION = '0.18';
 our @ISA     = qw(Exporter);
 our @EXPORT  = qw(prFile
                   prPage
@@ -420,11 +420,13 @@ sub prAdd
    1;
 }
 
-  
-################# Ett grafiskt "formulär" ################
+########################## 
+# Ett grafiskt "formulär" 
+##########################
 
 sub prForm
-{ my ($sidnr, $adjust, $effect, $tolerant, $infil);
+{ my ($sidnr, $adjust, $effect, $tolerant, $infil, $x, $y, $size, $xsize,
+      $ysize, $rotate);
   my $param = shift;
   if (ref($param) eq 'HASH')
   {  $infil    = $param->{'file'};
@@ -432,6 +434,12 @@ sub prForm
      $adjust   = $param->{'adjust'} || '';
      $effect   = $param->{'effect'} || 'print';
      $tolerant = $param->{'tolerant'} || '';
+     $x        = $param->{'x'} || 0;
+     $y        = $param->{'y'} || 0;
+     $rotate   = $param->{'rotate'} || 0;
+     $size     = $param->{'size'} || 1;
+     $xsize    = $param->{'xsize'} || 1;
+     $ysize    = $param->{'ysize'} || 1;
   }
   else
   {  $infil    = $param;
@@ -439,6 +447,12 @@ sub prForm
      $adjust   = shift || '';
      $effect   = shift || 'print';
      $tolerant = shift || '';
+     $x        = shift || 0;
+     $y        = shift || 0;
+     $rotate   = shift || 0;
+     $size     = shift || 1;
+     $xsize    = shift || 1;
+     $ysize    = shift || 1;
   }
   
   my $refNr;
@@ -502,30 +516,39 @@ sub prForm
      }
   }
   my @BBox = @{$form{$fSource}[fBBOX]};
-  if (($effect eq 'print') && ($form{$fSource}[fVALID]))
+  if (($effect eq 'print') && ($form{$fSource}[fVALID]) && ($refNr))
   {   if (! defined $defGState)
       { prDefaultGrState();
       }
   
       if ($adjust)
       {   $stream .= "q\n";
-          my ($m1, $m2, $m3, $m4, $m5, $m6) = calcMatrix(@BBox, $adjust);
-          $stream .= "$m1 $m2 $m3 $m4 $m5 $m6 cm\n";
-      
+          $stream .= fillTheForm(@BBox, $adjust);
+          $stream .= "\n/Gs0 gs\n";
+          $stream .= "/$namn Do\n";
+          $stream .= "Q\n";
       }
-      $stream .= "\n/Gs0 gs\n";   
-      if ($refNr)
-      {  $stream .= "/$namn Do\n";
-         $sidXObject{$namn} = $refNr;
+      elsif (($x) || ($y) || ($rotate) || ($size != 1) 
+                  || ($xsize != 1)     || ($ysize != 1))
+      {   $stream .= "q\n";
+          $stream .= calcMatrix($x, $y, $rotate, $size, 
+                     $xsize, $ysize, $BBox[2], $BBox[3]);
+          $stream .= "\n/Gs0 gs\n";
+          $stream .= "/$namn Do\n";
+          $stream .= "Q\n";
       }
-      if ($adjust)
-      {  $stream .= "Q\n";
+      else
+      {   $stream .= "\n/Gs0 gs\n";   
+          $stream .= "/$namn Do\n";
+          
       }
+      $sidXObject{$namn}   = $refNr;
       $sidExtGState{'Gs0'} = $defGState;
   }
   if ($runfil)
   {  $infil = prep($infil);
-     $log .= "Form~$infil~$sidnr~$adjust~$effect~$tolerant\n";
+     $log .= "Form~$infil~$sidnr~$adjust~$effect~$tolerant";
+     $log .= "~$x~$y~$rotate~$size~$xsize~$ysize\n";
   }
   if (! $pos)
   {  errLog("No output file, you have to call prFile first");
@@ -1058,7 +1081,7 @@ __END__
 
 =head1 NAME
 
-PDF::Reuse - Reuse and mass produce PDF documents with this module   
+PDF::Reuse - Reuse and mass produce PDF documents   
 
 =head1 SYNOPSIS
 
@@ -1118,7 +1141,6 @@ or transfer.
 =back
 
 PDF::Reuse::Tutorial might show you best what you can do with this module.
-Look at it first, before proceeding to the functions !
 
 =head1 FUNCTIONS
 
@@ -1130,7 +1152,9 @@ The module doesn't make any attempt to import anything from encrypted files.
 
 =head1 Mandatory Functions
 
-=head2 prFile ( [$fileName] )           
+=head2 prFile		- define output
+ 
+   prFile ( [$fileName] )           
 
 File to create. If another file is current when this function is called, the first
 one is written and closed. Only one file is processed at a single moment. If
@@ -1139,7 +1163,9 @@ $fileName is undefined, output is written to STDOUT.
 Look at any program in this documentation for an example. prInitVars() shows how
 this function could be used together with a web server.
 
-=head2 prEnd ()
+=head2 prEnd		- end/flush buffers 
+
+   prEnd ()
 
 When the processing is going to end, the buffers of the B<last> file has to be written to the disc.
 If this function is not called, the page structure, xref part and so on will be 
@@ -1151,7 +1177,9 @@ Look at any program in this documentation for an example.
 =head1 Optional Functions
 
 
-=head2 prAdd ( $string )
+=head2 prAdd		- add "low level" instructions 
+
+    prAdd ( $string )
 
 With this command you can add whatever you want to the current content stream.
 No syntactical checks are made, but if you use an internal name, the module tries
@@ -1182,36 +1210,10 @@ This function is intended to give you detail control at a low level.
    prAdd($string);                       
    prEnd(); 
 
-=head2 prBar ([$x, $y, $string])
 
-Prints a bar font pattern at the current page.
-Returns $internalName for the font.
-$x and $y are coordinates in pixels and $string should consist of the characters
-'0', '1' and '2' (or 'G'). '0' is a white bar, '1' is a dark bar. '2' and 'G' are
-dark, slightly longer bars, guard bars. 
-You can use e.g. GD::Barcode or one module in that group to calculate the barcode
-pattern. prBar "translates" the pattern to white and black bars.
+=head2 prBookmark		- define bookmarks 
 
-   use PDF::Reuse;
-   use GD::Barcode::Code39;
-   use strict;
-
-   prFile('myFile.pdf');
-   my $oGdB = GD::Barcode::Code39->new('JOHN DOE');
-   my $sPtn = $oGdB->barcode();
-   prBar(100, 600, $sPtn);
-   prEnd();
-
-Internally the module uses a font for the bars, so you might want to change the font size before calling
-this function. In that case, use prFontSize() .
-If you call this function without arguments it defines the bar font but does
-not write anything to the current page.
-
-B<An easier and often better way to produce barcodes is to use PDF::Reuse::Barcode. 
-Look at that module!>
-
-
-=head2 prBookmark($reference)
+   prBookmark($reference)
 
 Defines a "bookmark". $reference refers to a hash or array of hashes which look
 something like this:
@@ -1271,15 +1273,9 @@ your data. You can let your users go to external links also, so they can "drill 
 to other documents.> 
 
 
-=head2 prCid ( $timeStamp )
+=head2 prCompress		- compress/zip added streams 
 
-An internal function. Don't bother about it. It is used in automatic
-routines when you want to restore a document. It gives modification time of
-the next PDF-file or JavaScript.
-See "Restoring a document from the log" in the tutorial for more about the
-time stamp
-
-=head2 prCompress ( [1] )
+   prCompress ( [1] )
 
 '1' here is a directive to compress all B<new> streams of the current file. Streams
 which are included with prForm, prDocForm and prDoc are not changed. New 
@@ -1290,7 +1286,9 @@ prCompress(); is a directive not to compress. This is default.
 
 See e.g. "Starting to reuse" in the tutorial for an example.
 
-=head2 prDoc ( $documentName )
+=head2 prDoc		- include a document 
+
+   prDoc ( $documentName )
 
 Returns number of pages.
 Adds a document to the document you are creating. If it is the first interactive
@@ -1312,7 +1310,9 @@ with JavaScripts you have added (if any).
    prEnd(); 
 
 
-=head2 prDocDir ( $directoryName )
+=head2 prDocDir		- set directory for produced documents 
+
+   prDocDir ( $directoryName )
 
 Sets directory for produced documents
 
@@ -1325,33 +1325,42 @@ Sets directory for produced documents
    prText(200, 600, 'New text');
    prEnd();
 
-=head2 prDocForm ( $pdfFile, [$page, $adjust, $effect] )
+=head2 prDocForm		- use an interactive page as a form 
 
-Reuses an interactive page
+Alternative 1) You put your parameters in an anonymous hash
 
-Alternatively you can call this function with a hash like this
+   prDocForm ( { file     => $pdfFile,       # template file
+                 page     => $page,          # page number (of imported template)
+                 adjust   => $adjust,        # try to fill the media box
+                 effect   => $effect,        # action to be taken
+                 tolerant => $tolerant,      # continue even with an invalid form
+                 x        => $x,             # $x pixels from the left
+                 y        => $y,             # $y pixels from the bottom
+                 rotate   => $degree,        # rotate 
+                 size     => $size,          # multiply everything by $size
+                 xsize    => $xsize,         # multiply horizontally by $xsize
+                 ysize    => $ysize } )      # multiply vertically by $ysize
+Ex.:
+    my $internalName = prDocForm ( {file     => 'myFile.pdf',
+                                    page     => 2 } );
+              
+Alternative 2) You put your parameters in this order
 
-    my $intName = prDocForm ( {file   => 'myFile.pdf',
-                               page   => 2,
-                               adjust => 1,
-                               effect => 'print' } );
+	prDocForm ( $pdfFile, [$page, $adjust, $effect, $tolerant, $x, $y, $degree,
+            $size, $xsize, $ysize] )
 
 
-If B<$pageNo> is missing, 1 is assumed. 
-B<$adjust>, could be 1 or nothing. If it is given the program tries to
-adjust the page to the current media box (paper size). Usually you shouldn't adjust
-an interactive page. The graphic and interactive components are independent of 
-each other and it is a great risk that any coordination is lost. 
-B<$effect> can have 3 values: B<'print'>, which is default, loads the page in an internal
-table, adds it to the document and prints it to the current page. B<'add'>, loads the
-page and adds it to the document. (Now you can "manually" manage the way you want to
-print it to different pages within the document.) B<'load'> just loads the page in an 
-internal table. (You can now take I<parts> of a page like fonts and objects and manage
-them, without adding all the page to the document.) You don't get any defined internal name of the
-form, if you let this parameter be 'load'.
+Anyway the function returns in list context:  B<$intName, @BoundingBox, 
+$numberOfImages>, in scalar context:  B<$internalName> of the form.
 
-In list context returns B<$internalName, @BoundingBox[1..4], $numberOfImages>.
-In scalar context returns B<$internalName> of the graphic form.
+Look at prForm() for an explaination of the parameters.
+
+B<file> is the only parameter you always have to specify. The others get default
+values, if not given.
+
+N.B. Usually you shouldn't adjust or change size and proportions of an interactive
+page. The graphic and interactive components are independent of each other and there 
+is a great risk that any coordination is lost. 
 
 This function redefines a page to an "XObject" (the graphic parts), then the 
 page can be reused in a much better way. Unfortunately there is an important 
@@ -1378,7 +1387,9 @@ save the file.
 Remember to save that file before closing it.)
 
 
-=head2 prExtract ( $pdfFile, $pageNo, $oldInternalName )
+=head2 prExtract		- extract an object group 
+
+   prExtract ( $pdfFile, $pageNo, $oldInternalName )
 
 B<oldInternalName>, a "name"-object.  This is the internal name you find in the original file.
 Returns a B<$newInternalName> which can be used for "low level" programming. You
@@ -1388,7 +1399,9 @@ e.g. thermometer.pm, to see how this function can be used.
 When you call this function, the necessary objects will be copied to your new
 PDF-file, and you can refer to them with the new name you receive.
 
-=head2 prField ( $fieldName, $value )
+=head2 prField		- assign a value to an interactive field 
+
+	prField ( $fieldName, $value )
 
 B<$fieldName> is an interactive field in the document you are creating.
 It has to be spelled exactly the same way here as it spelled in the document.
@@ -1404,13 +1417,13 @@ can write like this:
 
 You need 3 backslashes to preserve the special characters, if you have single-quotes.
 
-=head2 prFont ( [$fontName] )
+=head2 prFont		- set current font 
 
-Sets current font.
+   prFont ( [$fontName] )
 
 $fontName is an "external" font name. 
 In list context returns B<$internalName, $externalName, $oldInternalName,
-$oldExternalname> The first two variabels refer to the current font, the two later
+$oldExternalname> The first two variables refer to the current font, the two later
 to the font before the change. In scalar context returns b<$internalName>
 
 If a font wasn't found, Helvetica will be set.
@@ -1455,44 +1468,113 @@ The example above shows you two ways of setting and using a font. One simple, an
 one complicated with a possibility to detail control. 
 
 
-=head2 prFontSize ( [$size] )
+=head2 prFontSize		- set current font size 
 
-Sets current font size, returns B<$actualSize, $fontSizeBeforetheChange>.
+   prFontSize ( [$size] )
+
+Returns B<$actualSize, $fontSizeBeforetheChange>. Without parameters
 prFontSize() sets the size to 12 pixels, which is default. 
 
-=head2 prForm ( $pdfFile, [$page, $adjust, $effect, $tolerant] )
+=head2 prForm		- use a page from an old document as a form/background 
 
-Reuses a page from a PDF-file.
+Altrnative 1) You put your parameters in an anonymous hash
 
-Alternatively you can call this function with a hash like this
-
+   prForm ( { file     => $pdfFile,       # template file
+              page     => $page,          # page number (of imported template)
+              adjust   => $adjust,        # try to fill the media box
+              effect   => $effect,        # action to be taken
+              tolerant => $tolerant,      # continue even with an invalid form
+              x        => $x,             # $x pixels from the left
+              y        => $y,             # $y pixels from the bottom
+              rotate   => $degree,        # rotate 
+              size     => $size,          # multiply everything by $size
+              xsize    => $xsize,         # multiply horizontally by $xsize
+              ysize    => $ysize } )      # multiply vertically by $ysize
+Ex.:
     my $internalName = prForm ( {file     => 'myFile.pdf',
-                                 page     => 2,
-                                 adjust   => 1,
-                                 effect   => 'print',
-                                 tolerant => 1 } );
+                                 page     => 2 } );
+              
+Alternative 2) You put your parameters in this order
 
-if B<$page> is excluded 1 is assumed. B<$adjust>, could be 1 or nothing. If it is 
-given, the program tries to adjust the page to the current media box (paper size).
-This parameter is useless, unless the next parameter is 'print'.
+	prForm ( $pdfFile, [$page, $adjust, $effect, $tolerant, $x, $y, $degree,
+            $size, $xsize, $ysize] )
 
-The next two parameters are a little unusual and you can manage most often without them.
 
-B<$effect> can have 3 values: B<'print'>, which is default, loads the page in an internal
+Anyway the function returns in list context:  B<$intName, @BoundingBox, 
+$numberOfImages>, in scalar context:  B<$internalName> of the form. 
+
+B<file> is the only parameter you always have to specify. The others get default
+values, if not given. 
+
+if B<page> is excluded 1 is assumed. 
+
+B<adjust>, could be 1, 2 or 0/nothing. If it is 1, the program tries to adjust the
+form to the current media box (paper size) and keeps the proportions unchanged.
+If it is 2, the program tries to fill as much of the media box as possible, without 
+regards to the original proportions.
+If this parameter is given, "x", "y", "rotate", "size", "xsize" and "ysize"
+will be ignored.
+
+B<effect> can have 3 values: B<'print'>, which is default, loads the page in an internal
 table, adds it to the document and prints it to the current page. B<'add'>, loads the
 page and adds it to the document. (Now you can "manually" manage the way you want to
 print it to different pages within the document.) B<'load'> just loads the page in an 
 internal table. (You can now take I<parts> of a page like fonts and objects and manage
 them, without adding all the page to the document.)You don't get any defined 
-internal name of the form, if you let this parameter be 'load'.B<tolerant> can be nothing or
-something. If it is undefined, you will get an error if your program tries to load
+internal name of the form, if you let this parameter be 'load'.
+
+B<tolerant> can be nothing or something. If it is undefined, you will get an error if your program tries to load
 a page which the system cannot really handle, if it e.g. consists of many streams.
 If it is set to something, you have to test the first return value $internalName to
 know if the function was successful. Look at the program 'reuseComponent_pl' for an 
 example of usage.
 
-In list context returns B<$intName, @BoundingBox, $numberOfImages>
-In scalar context returns B<$internalName> of the form.
+B<x> where to start along the x-axis   (cannot be combined with "adjust")
+
+B<y> where to start along the y-axis   (cannot be combined with "adjust")
+
+B<rotate> A degree 0-360 to rotate the form counter-clockwise. (cannot be combined
+with "adjust") Often the form disappears out of the media box if degree >= 90.
+Then you can move it back with the x and y-parameters. If degree == 90, you can 
+add the width of the form to x, If degree == 180 add both width and height to x
+and y, and if degree == 270 you can add the height to y.
+
+B<rotate> can also by one of 'q1', 'q2' or 'q3'. Then the system rotates the form
+clockwise 90, 180 or 270 degrees and tries to keep the form within the media box.
+
+The rotation takes place after the form has been resized or moved.
+
+   Ex. To rotate from portrait (595 x 842 pt) to landscape (842 x 595 pt)
+
+   use PDF::Reuse;
+   use strict;
+   
+   prFile('New_Report.pdf');
+   prMbox(0, 0, 842, 595);           
+   
+   prForm({file   => 'cert1.pdf',
+           rotate => 'q1' } );  
+   prEnd();
+
+The same rotation can be achieved like this:
+
+   use PDF::Reuse;
+   use strict;
+   
+   prFile('New_Report.pdf');
+   prMbox(0, 0, 842, 595);
+               
+   prForm({file   => 'cert1.pdf',
+           rotate => 270,
+           y      => 595 } );  
+   prEnd();
+
+B<size> multiply every measure by this value (cannot be combined with "adjust") 
+
+B<xsize> multiply horizontally by this value (cannot be combined with "adjust")
+
+B<ysize> multiply vertically by $ysize (cannot be combined with "adjust")
+
 
 This function redefines a page to an "XObject" (the graphic parts), then the 
 page can be reused and referred to as a unit. Unfortunately there is an important 
@@ -1531,28 +1613,24 @@ JavaScript.
 
    my $xScale = 250 / ($vec[3] - $vec[1]);
    my $yScale = 200 / ($vec[4] - $vec[2]);
-   if ($xScale < $yScale)
-   {  $yScale = $xScale;
-   }
-   else
-   {  $xScale = $yScale;
-   }
+   
+   prForm ({ file => 'EUSA.pdf',
+             xsize => $xScale,
+             ysize => $yScale,
+             x     => 35,
+             y     => 85 });
 
-   my $string = "q\n";
-   $string   .= "$xScale 0 0 $yScale 35 85 cm\n"; 
-   $string   .= "/$vec[0] Do\n";
-   $string   .= "Q\n";
-   prAdd($string);
    prEnd();
 
 The first prForm(), in the code, is a simple and "normal" way of using the
 the function. The second time it is used, the size of the imported page is
 changed. It is adjusted to the media box which is current at that moment.
 Also data about the form is taken, so you can control more in detail how it
-will be displayed. Study the tutorial and the "PDF Reference Manual" for
-more information about the "low level" manipulations at the end of the code.
+will be displayed. 
 
-=head2 prGetLogBuffer ()
+=head2 prGetLogBuffer		- get the log buffer. 
+
+prGetLogBuffer ()
 
 returns a B<$buffer> of the log of the current page. (It could be used
 e.g. to calculate a MD5-digest of what has been registered that far, instead of 
@@ -1561,12 +1639,13 @@ accumulating the single values) A log has to be active, see prLogDir() below
 Look at "Using the template" and "Restoring a document from the log" in the
 tutorial for examples of usage.
 
-=head2 prGraphState ( $string )
+=head2 prGraphState		- define a graphic state parameter dictionary 
 
-Defines a graphic state parameter dictionary in the current file. It is a "low level"
-function. Returns B<$internalName>. The B<$string> has to be a complete dictionary
-with initial "<<" and terminating ">>". No syntactical checks are made.
-Perhaps you will never have to use this function.
+   prGraphState ( $string )
+
+This is a "low level" function. Returns B<$internalName>. The B<$string> has to 
+be a complete dictionary with initial "<<" and terminating ">>". No syntactical
+checks are made. Perhaps you will never have to use this function.
 
    use PDF::Reuse;
    use strict;
@@ -1608,50 +1687,60 @@ Perhaps you will never have to use this function.
    prEnd();
 
 
-=head2 prId ( $string )
+=head2 prImage		- reuse an image from an old PDF document 
 
-An internal function. Don't bother about it. It is used e.g. when a document is
-restored and an id has to be set, not calculated.
+Alternative 1) You put your parameters in an anonymous hash
 
-=head2 prIdType ( $string )
+   prImage( { file     => $pdfFile,       # template file
+              page     => $page,          # page number
+              imageNo  => $imageNo        # image number
+              adjust   => $adjust,        # try to fill the media box
+              effect   => $effect,        # action to be taken
+              x        => $x,             # $x pixels from the left
+              y        => $y,             # $y pixels from the bottom
+              rotate   => $degree,        # rotate 
+              size     => $size,          # multiply everything by $size
+              xsize    => $xsize,         # multiply horizontally by $xsize
+              ysize    => $ysize } )      # multiply vertically by $ysize
+Ex.:
+   prImage( { file    => 'myFile.pdf',
+              page    => 10,
+              imageNo => 2 } );
+              
+Alternative 2) You put your parameters in this order
 
-An internal function. Avoid using it. B<$string> could be "Rep" for replace or
-"None" to avoid calculating an id.
+	prImage ( $pdfFile, [$page, $imageNo, $effect, $adjust, $x, $y, $degree,
+            $size, $xsize, $ysize] )
+    
 
-Normally you don't use this function. Then an id is calculated with the help of
-Digest::MD5::md5_hex and some data from the run.
-
-=head2 prImage ( $pdfFile [, $pageNo, $imageNo, $effect] )
-
-Reuses an image.
-
-Alternatively you can call this function with the parameters in a hash
-like this
-
-    prImage( { file    => 'myFile.pdf',
-               pageNo  => 10,
-               imageNo => 2,
-               effect  => 'print' } );
-
-Returns in scalar context B<$internalName> As a list B<$internalName, $width, $height> 
+Returns in scalar context B<$internalName> As a list B<$internalName, $width, 
+$height> 
 
 Assumes that $pageNo and $imageNo are 1, if not specified. If $effect is given and
 anything else then 'print', the image will be defined in the document,
 but not shown at this moment.
 
+B<file> is the only parameter you always have to specify. The others get default
+values, if not given.
+
+For all other parameters, look at prForm().
+
    use PDF::Reuse;
    use strict;
 
    prFile('myFile.pdf');
-   prMoveTo(10, 400);
-   prScale(0.9, 0.8);
-   my @vec = prImage('best.pdf');
+   
+   my @vec = prImage({ file  => 'best.pdf',
+                       x     => 10,
+                       y     => 400,
+                       xsize => 0.9,
+                       ysize => 0.8 } );
    prText(35, 760, 'This is some text');
    # ...
 
    prPage();
    my @vec2 = prImage( { file    => 'destiny.pdf',
-                         pageNo  => 1,
+                         page    => 1,
                          imageNo => 1,
                          effect  => 'add' } );
    prText(25, 760, "There shouldn't be any image on this page");
@@ -1661,6 +1750,8 @@ but not shown at this moment.
    #  a box 300 X 300 pixels, and they are displayed
    ########################################################
 
+   prText(25, 800, 'This is the first image :');
+
    my $xScale = 300 / $vec[1];
    my $yScale = 300 / $vec[2];
    if ($xScale < $yScale)
@@ -1669,14 +1760,15 @@ but not shown at this moment.
    else
    {  $xScale = $yScale;
    }
-   $xScale *= $vec[1];
-   $yScale *= $vec[2];
-   prText(25, 800, 'This is the first image :');
-   my $string = "q\n";
-   $string   .= "$xScale 0 0 $yScale 25 450 cm\n";
-   $string   .= "/$vec[0] Do\n";
-   $string   .= "Q\n";
-   prAdd($string);
+      
+   prImage({ file   => 'best.pdf',
+             x      => 25,
+             y      => 450,
+             xsize  => $xScale,
+             ysize  => $yScale} );
+
+   prText(25, 400, 'This is the second image :');
+
    $xScale = 300 / $vec2[1];
    $yScale = 300 / $vec2[2];
    if ($xScale < $yScale)
@@ -1685,44 +1777,46 @@ but not shown at this moment.
    else
    {  $xScale = $yScale;
    }
-   $xScale *= $vec2[1];
-   $yScale *= $vec2[2];
-   prText(25, 400, 'This is the second image :');
-   $string  = "q\n";   
-   $string .= "$xScale 0 0 $yScale 25 25 cm\n";
-   $string .= "/$vec2[0] Do\n";
-   $string .= "Q\n";
-   prAdd($string);
+   
+   prImage({ file   => 'destiny.pdf',
+             x      => 25,
+             y      => 25,
+             xsize  => $xScale,
+             ysize  => $yScale} );
+   
    prEnd();
-
 
 On the first page an image is displayed in a simple way. While the second page
 is processed, prImage(), loads an image, but it is not shown here. On the 3:rd
-page, the two images are scaled and shown with "low level" directives. 
+page, the two images are scaled and shown. 
 
 In the distribution there is an utility program, 'reuseComponent_pl', which displays
 included images in a PDF-file and their "names". (The program cannot yet handle files 
 with 'cross reference objects' and 'object streams' from Acrobat 6.0)
 
 
-=head2 prInit ( $string[, $duplicateCode] )
+=head2 prInit		- add JavaScript to be executed at initiation 
+
+   prInit ( $string[, $duplicateCode] )
 
 B<$string> can be any JavaScript code, but you can only refer to functions included
 with prJs. The JavaScript interpreter will not know other functions in the document.
 Often you can add new things, but you can't remove or change interactive fields,
 because the interpreter hasn't come that far, when initiation is done.
+
 B<$duplicateCode> is undefined or anything. It duplicates the JavaScript code
 which has been used at initiation, so you can look at it from within Acrobat and
-debug it. It makes the document bigger.
+debug it. It makes the document bigger. This parameter is B<deprecated>.
   
 See prJs() for an example
 
 
-=head2 prInitVars([1])
+=head2 prInitVars		- initiate global variables and internal tables 
 
-To initiate global variables. If you run programs with PDF::Reuse as persistent
-procedures, you probably need to initiate global variables. 
-If you have '1' or anything as parameter, internal tables for forms, images, fonts
+   prInitVars([1])
+
+If you run programs with PDF::Reuse as persistent procedures, you probably need to
+initiate global variables. If you have '1' or anything as parameter, internal tables for forms, images, fonts
 and interactive functions are B<not> initiated. The module "learns" offset and sizes of
 used objects, and can process them faster, but at the same time the size of the 
 program grows.
@@ -1745,7 +1839,9 @@ If you call this function without parameters all global variables, including the
 internal tables, are initiated.
 
 
-=head2 prJpeg ( $imageFile, $width, $height )
+=head2 prJpeg		- import a jpeg-image 
+
+   prJpeg ( $imageFile, $width, $height )
 
 B<$imageFile> contains 1 single jpeg-image. B<$width> and B<$height>
 also have to be specified. Returns the B<$internalName>
@@ -1773,7 +1869,9 @@ also have to be specified. Returns the B<$internalName>
 This is a little like an extra or reserve routine to add images to the document.
 The most simple way is to use prImage()  
 
-=head2 prJs ( $string|$fileName )
+=head2 prJs		- add JavaScript 
+
+   prJs ( $string|$fileName )
 
 To add JavaScript to your new document. B<$string> has to consist only of
 JavaScript functions: function a (..){ ... } function b (..) { ...} and so on
@@ -1789,7 +1887,9 @@ In that case the file has to consist only of JavaScript functions.
    prEnd();
 
 
-=head2 prLog ( $string )
+=head2 prLog		- add a string to the log 
+
+   prLog ( $string )
 
 Adds whatever you want to the current log (a reference No, a commentary, a tag ?)
 A log has to be active see prLogDir()
@@ -1797,7 +1897,9 @@ A log has to be active see prLogDir()
 Look at "Using the template" and "Restoring the document from the log" in
 the tutorial for an example.
 
-=head2 prLogDir ( $directory )
+=head2 prLogDir		- set directory for the log 
+
+   prLogDir ( $directory )
 
 Sets a directory for the logs and activates the logging. 
 A little log file is created for each PDF-file. Normally it should be much, much
@@ -1821,37 +1923,27 @@ In this example a log file with the name 'myFile.pdf.dat' is created in the
 directory 'C:\run'. If that directory doesn't exist, the system tries to create it.
 (But, just as mkdir does, it only creates the last level in a directory tree.)
 
-=head2 prMbox ( [$lowerLeftX, $lowerLeftY, $upperRightX, $upperRightY] )
+=head2 prMbox		- define the format (MediaBox) of the current page. 
 
-Defines the format (MediaBox) of the current page. 
+   prMbox ( [$lowerLeftX, $lowerLeftY, $upperRightX, $upperRightY] )
 
 If the function or the parameters are missing, they are set to 0, 0, 595, 842 pixels respectively.   
 
 See prForm() for an example.
 
-=head2 prMoveTo ( $x, $y )
 
-Defines positions where to put e.g. next image
+=head2 prPage		- insert a page break
 
-See prImage() for an example.
-
-=head2 prPage ( [$noLog] )
-
-Inserts a page break
+   prPage ( [$noLog] )
 
 Don't use the optional parameter, it is only used internally, not to clutter the log,
 when automatic page breaks are made.
 
 See prForm() for an example. 
 
-=head2 prScale ( [$xSize, $ySize] )
+=head2 prText		- add a text-string 
 
-Each of $xSize and $ySize are set to 1 if missing. You can use this function to
-scale an image before showing it.
-
-See prImage() for an example.
-
-=head2 prText ( $x, $y, $string )
+   prText ( $x, $y, $string )
 
 Puts B<$string> at position B<$x, $y>
 Current font and font size is used. (If you use prAdd() before this function,
@@ -1859,7 +1951,9 @@ many other things could also influence the text.)
 
 See prImage() for an example.  
 
-=head2 prTouchUp ( [1] );
+=head2 prTouchUp		- make changes and reuse more difficult 
+
+   prTouchUp ( [1] );
 
 By default and after you have issued prTouchUp(1), you can change the document
 with the TouchUp tool from within Acrobat.
@@ -1872,18 +1966,103 @@ It would be very difficult to forge a document unless the forger also has access
 computer and knows how the check sums are calculated.)
 
 B<Avoid to switch off the TouchUp tool for your templates.> It creates an
-extra level within the PDF-documents, but use it for your final documents.
+extra level within the PDF-documents . Use this function for your final documents.
  
-
 See "Using the template" in the tutorial for an example. 
 
 (To encrypt your documents: use the batch utility within Acrobat)
 
-=head2 prVers ( $versionNo )
+ 
 
-An internal routine to check version of this module in case a document has to be
-restored. 
+=head1 INTERNAL OR DEPRECATED FUNCTIONS
 
+=over 2
+
+=item prBar		- define and paint bars for bar fonts 
+
+   prBar ([$x, $y, $string])
+
+Prints a bar font pattern at the current page.
+Returns $internalName for the font.
+$x and $y are coordinates in pixels and $string should consist of the characters
+'0', '1' and '2' (or 'G'). '0' is a white bar, '1' is a dark bar. '2' and 'G' are
+dark, slightly longer bars, guard bars. 
+You can use e.g. GD::Barcode or one module in that group to calculate the barcode
+pattern. prBar "translates" the pattern to white and black bars.
+
+   use PDF::Reuse;
+   use GD::Barcode::Code39;
+   use strict;
+
+   prFile('myFile.pdf');
+   my $oGdB = GD::Barcode::Code39->new('JOHN DOE');
+   my $sPtn = $oGdB->barcode();
+   prBar(100, 600, $sPtn);
+   prEnd();
+
+Internally the module uses a font for the bars, so you might want to change the font size before calling
+this function. In that case, use prFontSize() .
+If you call this function without arguments it defines the bar font but does
+not write anything to the current page.
+
+B<An easier and often better way to produce barcodes is to use PDF::Reuse::Barcode.> 
+Look at that module!
+
+=item prCid		- define timestamp/checkid 
+
+   prCid ( $timeStamp )
+
+An internal function. Don't bother about it. It is used in automatic
+routines when you want to restore a document. It gives modification time of
+the next PDF-file or JavaScript.
+See "Restoring a document from the log" in the tutorial for more about the
+time stamp
+
+=item prId		- define id-string of a PDF document 
+
+   prId ( $string )
+
+An internal function. Don't bother about it. It is used e.g. when a document is
+restored and an id has to be set, not calculated.
+
+=item prIdType		- define id-type 
+
+   prIdType ( $string )
+
+An internal function. Avoid using it. B<$string> could be "Rep" for replace or
+"None" to avoid calculating an id.
+
+Normally you don't use this function. Then an id is calculated with the help of
+Digest::MD5::md5_hex and some data from the run.
+
+=item prMoveTo 
+
+   prMoveTo ( $x, $y )
+
+B<Deprecated> This function will be removed during 2004. You can define positions
+with parameters directly to prImage(), prForm() and prDocForm(). 
+
+Defines positions where to put e.g. next image
+
+=item prScale 
+
+   prScale ( [$xSize, $ySize] )
+
+B<Deprecated> This function will be removed during 2004. You can define sizes
+with parameters directly to prImage(), prForm() and prDocForm().
+
+Each of $xSize and $ySize are set to 1 if missing. You can use this function to
+scale an image before showing it.
+
+
+=item prVers		- check version of log and program 
+
+   prVers ( $versionNo )
+
+To check version of this module in case a document has to be
+restored.
+
+=back
 
 =head1 SEE ALSO
 
@@ -1897,7 +2076,7 @@ downloaded it from http://partners.adobe.com/asn/developer/technotes/acrobatpdf.
 If you are serious about producing PDF-files, you probably need Adobe Acrobat sooner
 or later. It has a price tag. Other good programs are GhostScript and GSview. 
 I got them via http://www.cs.wisc.edu/~ghost/index.html  Sometimes they can replace Acrobat.
-A nice little detail is e.g. that GSview shows the x- and y-coordinats better then Acrobat. If you need to convert HTML-files to PDF, HTMLDOC is a possible tool. Download it from
+A nice little detail is e.g. that GSview shows the x- and y-coordinates better then Acrobat. If you need to convert HTML-files to PDF, HTMLDOC is a possible tool. Download it from
 http://www.easysw.com . A simple tool for vector graphics is Mayura Draw 2.04, download
 it from http://www.mayura.com. It is free. I have used it to produce the graphic
 OO-code in the tutorial. It produces postscript which the Acrobat Distiller (you get it together with Acrobat)
@@ -2186,27 +2365,37 @@ sub prInitVars
 
 sub prImage
 { my $param = shift;
-  my ($infil, $sidnr, $bildnr, $effect);
+  my ($infil, $sidnr, $bildnr, $effect, $adjust, $x, $y, $size, $xsize,
+      $ysize, $rotate);
+
   if (ref($param) eq 'HASH')
   {  $infil    = $param->{'file'};
      $sidnr    = $param->{'page'} || 1;
      $bildnr   = $param->{'imageNo'} || 1;
      $effect   = $param->{'effect'} || 'print';
+     $adjust   = $param->{'adjust'} || '';
+     $x        = $param->{'x'} || 0;
+     $y        = $param->{'y'} || 0;
+     $rotate   = $param->{'rotate'} || 0;
+     $size     = $param->{'size'} || 1;
+     $xsize    = $param->{'xsize'} || 1;
+     $ysize    = $param->{'ysize'} || 1;
   }
   else
   {  $infil   = $param;
      $sidnr   = shift || 1;
      $bildnr  = shift || 1;
      $effect  = shift || 'print';
+     $adjust   = shift || '';
+     $x        = shift || 0;
+     $y        = shift || 0;
+     $rotate   = shift || 0;
+     $size     = shift || 1;
+     $xsize    = shift || 1;
+     $ysize    = shift || 1;
   }
 
-  my $refNr;
-  my $inamn;
-  my $bildIndex;
-  my $xc;
-  my $yc;
-  my $xs;
-  my $ys;
+  my ($refNr, $inamn, $bildIndex, $xc, $yc, $xs, $ys);
   $type = 'image';
   
   $bildIndex = $bildnr - 1;
@@ -2244,44 +2433,39 @@ sub prImage
                        $bildnr, $image{$iSource}[imIMAGENO]);
      $objRef{$inamn} = $refNr;
   }
+  else
+  {   $refNr = $objRef{$inamn};
+  }
      
   my @iData = @{$image{$iSource}};
 
-  if ($effect eq 'print')
-  {  
-     if (! defined  $defGState)
+  if (($effect eq 'print') && ($refNr))
+  {  if (! defined  $defGState)
      { prDefaultGrState();}
-  
      $stream .= "\n/Gs0 gs\n";
-
-     if ($xPos)
-     {  $xc = $xPos; }
+     $stream .= "q\n";
+     
+     if ($adjust)
+     {  $stream .= fillTheForm(0, 0, $iData[imWIDTH], $iData[imHEIGHT],$adjust);        
+     }
      else
-     {  $xc = $iData[imXPOS]; }
-
-     if ($yPos)
-     {  $yc = $yPos; }
-     else
-     {  $yc = $iData[imYPOS]; }
-
-     if ($xScale == 1)
-     {  $xs = $iData[imWIDTH] * $iData[imXSCALE]; }
-     else
-     {  $xs = $iData[imWIDTH] * $xScale; }
-
-     if ($yScale == 1)
-     {  $ys = $iData[imHEIGHT] * $iData[imYSCALE]; }
-     else
-     {  $ys = $iData[imHEIGHT] * $yScale; }
-
-     $stream .= "\nq\n$xs 0 0 $ys $xc $yc cm\n";
-     $stream .= "/$inamn Do\nQ\n";
+     {   my $tXsize = ($xScale * $xsize);
+         my $tYsize = ($yScale * $ysize);
+         my $tX     = ($x + $xPos + $iData[imXPOS]);
+         my $tY     = ($y + $yPos + $iData[imYPOS]);
+         $stream .= calcMatrix($tX, $tY, $rotate, $size, 
+                               $tXsize, $tYsize, $iData[imWIDTH], $iData[imHEIGHT]);
+     }
+     $stream .= "$iData[imWIDTH] 0 0 $iData[imHEIGHT] 0 0 cm\n";
+     $stream .= "/$inamn Do\n";
      $sidXObject{$inamn} = $refNr;
+     $stream .= "Q\n";
      $sidExtGState{'Gs0'} = $defGState;
   }
   if ($runfil)
   {  $infil = prep($infil);
-     $log .= "Image~$infil~$sidnr~$bildnr~$effect\n";
+     $log .= "Image~$infil~$sidnr~$bildnr~$effect~$adjust";
+     $log .= "$x~$y~$size~$xsize~$ysize~$rotate\n";
   }
   if (! $pos)
   {  errLog("No output file, you have to call prFile first");
@@ -2464,27 +2648,40 @@ sub prDoc
 ############# Ett interaktivt + grafiskt "formulär" ##########
 
 sub prDocForm
-{ my ($sidnr, $adjust, $effect, $action, $tolerant, $infil);
+{my ($sidnr, $adjust, $effect, $tolerant, $infil, $x, $y, $size, $xsize,
+      $ysize, $rotate);
   my $param = shift;
   if (ref($param) eq 'HASH')
   {  $infil    = $param->{'file'};
-     $sidnr    = $param->{'page'}     || 1;
-     $adjust   = $param->{'adjust'}   || '';
-     $effect   = $param->{'effect'}   || 'print';
+     $sidnr    = $param->{'page'} || 1;
+     $adjust   = $param->{'adjust'} || '';
+     $effect   = $param->{'effect'} || 'print';
      $tolerant = $param->{'tolerant'} || '';
+     $x        = $param->{'x'} || 0;
+     $y        = $param->{'y'} || 0;
+     $rotate   = $param->{'rotate'} || 0;
+     $size     = $param->{'size'} || 1;
+     $xsize    = $param->{'xsize'} || 1;
+     $ysize    = $param->{'ysize'} || 1;
   }
   else
-  {  $infil   = $param;
-     $sidnr   = shift  || 1;
-     $adjust  = shift  || '';
-     $effect  = shift  || 'print';
+  {  $infil    = $param;
+     $sidnr    = shift || 1;
+     $adjust   = shift || '';
+     $effect   = shift || 'print';
      $tolerant = shift || '';
+     $x        = shift || 0;
+     $y        = shift || 0;
+     $rotate   = shift || 0;
+     $size     = shift || 1;
+     $xsize    = shift || 1;
+     $ysize    = shift || 1;
   }
   my $namn;
   my $refNr;
   $type = 'docform';
   my $fSource = $infil . '_' . $sidnr; 
-
+  my $action;
   if (! exists $form{$fSource})
   {  $formNr++;
      $namn = 'Fm' . $formNr;
@@ -2541,37 +2738,43 @@ sub prDocForm
      }  
   }
   my @BBox = @{$form{$fSource}[fBBOX]};
-  if (($effect eq 'print') && ($form{$fSource}[fVALID]))
+  if (($effect eq 'print') && ($form{$fSource}[fVALID]) && ($refNr))
   {   if ((! defined $interActive)
       && ($sidnr == 1)
       &&  (defined %{$intAct{$fSource}[0]}) )
       {  $interActive = $infil . ' ' . $sidnr;
          $interAktivSida = 1;
       }
-
       if (! defined $defGState)
       { prDefaultGrState();
       }
-  
       if ($adjust)
       {   $stream .= "q\n";
-          my ($m1, $m2, $m3, $m4, $m5, $m6) = calcMatrix(@BBox, $adjust);
-          $stream .= "$m1 $m2 $m3 $m4 $m5 $m6 cm\n";
-      
+          $stream .= fillTheForm(@BBox, $adjust);
+          $stream .= "\n/Gs0 gs\n";
+          $stream .= "/$namn Do\n";
+          $stream .= "Q\n";
       }
-      $stream .= "\n/Gs0 gs\n";   
-      if ($refNr)
-      {  $stream .= "/$namn Do\n";
-         $sidXObject{$namn} = $refNr;
+      elsif (($x) || ($y) || ($rotate) || ($size != 1) 
+                  || ($xsize != 1)     || ($ysize != 1))
+      {   $stream .= "q\n";
+          $stream .= calcMatrix($x, $y, $rotate, $size, 
+                               $xsize, $ysize, $BBox[2], $BBox[3]);
+          $stream .= "\n/Gs0 gs\n";
+          $stream .= "/$namn Do\n";
+          $stream .= "Q\n";
       }
-      if ($adjust)
-      {  $stream .= "Q\n";
+      else
+      {   $stream .= "\n/Gs0 gs\n";   
+          $stream .= "/$namn Do\n";          
       }
+      $sidXObject{$namn} = $refNr;
       $sidExtGState{'Gs0'} = $defGState;
   }
   if ($runfil)
   {   $infil = prep($infil); 
-      $log .= "DocForm~$infil~$sidnr~$adjust~$effect~$tolerant\n";
+      $log .= "Form~$infil~$sidnr~$adjust~$effect~$tolerant";
+      $log .= "~$x~$y~$rotate~$size~$xsize~$ysize\n";
   }
   if (! $pos)
   {  errLog("No output file, you have to call prFile first");
@@ -2593,48 +2796,71 @@ sub prDocForm
 }
 
 sub calcMatrix
-{  my ($left, $bottom, $right, $top, $fill) = @_;
+{  my ($x, $y, $rotate, $size, $xsize, $ysize, $upperX, $upperY) = @_;
+   my ($str, $xSize, $ySize);
+   $size  = 1 if ($size  == 0);
+   $xsize = 1 if ($xsize == 0);
+   $ysize = 1 if ($ysize == 0);
+   $xSize = $xsize * $size;
+   $ySize = $ysize * $size;   
+   $str = "$xSize 0 0 $ySize $x $y cm\n";
+   if ($rotate)
+   {   if ($rotate =~ m'q(\d)'oi)
+       {  my $tal = $1;
+          if ($tal == 1)
+          {  $upperY = $upperX;
+             $upperX = 0;
+             $rotate = 270;
+          }
+          elsif ($tal == 2)
+          {  $rotate = 180;
+          }
+          else
+          {  $rotate = 90;
+             $upperX = $upperY;
+             $upperY = 0;
+          }
+       }
+       else
+       {   $upperX = 0;
+           $upperY = 0;
+       }  
+       my $radian = $rotate / 57.3;    # approx. 
+       my $Cos    = cos($radian);
+       my $Sin    = sin($radian);
+       my $negSin = $Sin * -1;
+       $str .= "$Cos $Sin $negSin $Cos $upperX $upperY cm\n";
+   }
+   return $str;
+}
 
-   # $fill = uc($fill);
+sub fillTheForm
+{  my $left   = shift || 0;
+   my $bottom = shift || 0;
+   my $right  = shift || 0;
+   my $top    = shift || 0; 
+   my $how    = shift || 1;
+   my $image  = shift;
+   my $str;
    my $scaleX = 1;
-   my $skewX  = 0;
-   my $skewY  = 0;
    my $scaleY = 1; 
-   my $transX = 0;
-   my $transY = 0;
-
+   
    my $xDim = $genUpperX - $genLowerX;
    my $yDim = $genUpperY - $genLowerY;
-   my $xNy = $right - $left;
-   my $yNy = $top - $bottom;
-   if ($xNy > $xDim)
-   {  $scaleX = $xDim / $xNy; 
+   my $xNy  = $right - $left;
+   my $yNy  = $top - $bottom;
+   $scaleX  = $xDim / $xNy;
+   $scaleY  = $yDim / $yNy;
+   if ($how == 1)
+   {  if ($scaleX < $scaleY)
+      {  $scaleY = $scaleX;
+      }
+      else
+      {  $scaleX = $scaleY;
+      }
    }
-   elsif (($xNy < $xDim) && ($fill)) 
-   {  $scaleX = $xDim / $xNy;
-   }
-   
-   if ($yNy > $yDim)
-   {  $scaleY = $yDim / $yNy; 
-   }
-   elsif (($yNy < $yDim) && ($fill))
-   {  $scaleY = $yDim / $yNy;
-   }
-   
-   if ($scaleY < $scaleX)
-   {  $scaleX = $scaleY; 
-   }
-   elsif ($scaleX < $scaleY)
-   {  $scaleY = $scaleX; 
-   }
-    
-   if ($left < 0)
-   { $transX = $left; 
-   }
-   if ($bottom < 0)
-   { $transY = $bottom; 
-   }  
-   return ($scaleX, $skewX, $skewY, $scaleY, $transX, $transY);
+   $str = "$scaleX 0 0 $scaleY $left $bottom cm\n";
+   return $str;
 }
 
 sub prJpeg
