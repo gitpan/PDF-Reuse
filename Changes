@@ -1,12 +1,17 @@
 Revision history for Perl extension PDF::Reuse.
 
+0.17  Sat Nov 1 2003
+     A bug removed. The module sometimes got confused when it was reconstructing
+     forms and was switching between different files. This was an error 
+     introduced with version 0.15
+
 0.16  Tue Oct 21 2003
      Added backslashes to the 4 special characters in the comment line, which is 
      written to every file produced by PDF::Reuse. If not escaped,
      they caused Red Hat (8.0) Linux to terminate the run with the error message:
      "Wide character in syswrite ... PDF/Reuse.pm line 268".
      A changed regex to find object references. Some global variables 
-     have been removed. If you use the function prCompess(1), new JavaScripts
+     have been removed. If you use the function prCompress(1), new JavaScripts
      are also compressed.
      You can have a new parameter with prInit, so the initiation code is shown
      at document level. By default (now, but not before) it is not shown. 

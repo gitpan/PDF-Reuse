@@ -16,7 +16,7 @@ use autouse 'Compress::Zlib' => qw(compress($)
 use autouse 'Data::Dumper'   => qw(Dumper);
 use AutoLoader qw(AUTOLOAD);
 
-our $VERSION = '0.16';
+our $VERSION = '0.17';
 our @ISA     = qw(Exporter);
 our @EXPORT  = qw(prFile
                   prPage
@@ -402,8 +402,7 @@ sub prText
   if (! $pos)
   {  errLog("No output file, you have to call prFile first");
   }
-  1;
-   
+  1;  
 }
 
 
@@ -421,7 +420,7 @@ sub prAdd
    1;
 }
 
-      
+  
 ################# Ett grafiskt "formulär" ################
 
 sub prForm
@@ -3329,20 +3328,43 @@ sub getKnown
        sysread INFIL, $del2, ($objData[oNR][1]   - $objData[oSTREAMP]);
     }
     else
-    {  $del1 = getObject($nr, 1);
+    {  my $buf;
+       my ($offs, $siz, $embedded) = @{$objData[oNR]};
+       if ($offs)
+       {  sysseek INFIL, $offs, 0;
+          sysread INFIL, $buf, $siz;
+          if ($buf =~ m'^\d+ \d+ obj\s*(.*)'os)
+          {   $del1 = $1;
+          }  
+       }
+       elsif (exists $unZipped{$nr})
+       {  $del1 = "$unZipped{$nr} endobj";
+       }
+       elsif ($embedded)
+       {   @objData = @{$$$p[0]->{$embedded}};
+           unZipPrepare($embedded, $objData[oNR][0], $objData[oNR][1]);
+           $del1 = "$unZipped{$nr} endobj"; 
+       }        
     }
     return (\$del1, \$del2, $objData[oKIDS], $objData[oTYPE]);
 }
 
 
 sub unZipPrepare
-{  my $nr = shift;
-   my $buf = getObject($nr);
+{  my ($nr, $offs, $size) = @_;
+   my $buf;
+   if ($offs)
+   {   sysseek INFIL, $offs, 0;
+       sysread INFIL, $buf, $size;
+   }
+   else
+   {   $buf = getObject($nr);
+   }
    my (%param, $stream, $str);
    
    if ($buf =~ m'^(\d+ \d+ obj\s*<<[\w\d\/\s\[\]<>]+)stream\b'os)
    {  $str  = $1;
-      my $offs = length($str) + 7;
+      $offs = length($str) + 7;
       if (substr($buf, $offs, 1) eq "\n")
       {  $offs++;
       }
@@ -3738,6 +3760,9 @@ sub getPage
            else
            {   push @nokids, $key; }
        }
+       if ((defined $$$robj[0]->[2]) && (! exists $$$ref[fOBJ]->{$$$robj[0]->[2]}))
+       {  $$$ref[fOBJ]->{$$$robj[0]->[2]}->[0] = $oldObject{$$$robj[0]->[2]};
+       }
    }
    if (scalar @kids)
    {  $form{$fSource}[fKIDS] = \@kids; 
@@ -3811,6 +3836,12 @@ sub getPage
                 }
              }
          }
+      }
+      for my $key (keys %{$$$ref[fOBJ]})
+      {   $robj  = \$$$ref[fOBJ]->{$key};
+          if ((defined $$$robj[0]->[2]) && (! exists $$$ref[fOBJ]->{$$$robj[0]->[2]}))
+          {  $$$ref[fOBJ]->{$$$robj[0]->[2]}->[0] = $oldObject{$$$robj[0]->[2]};
+          }
       }
   }
 
