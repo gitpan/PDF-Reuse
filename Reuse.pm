@@ -15,7 +15,7 @@ use Compress::Zlib qw(compress inflateInit);
 use autouse 'Data::Dumper'   => qw(Dumper);
 use AutoLoader qw(AUTOLOAD);
 
-our $VERSION = '0.28';
+our $VERSION = '0.29';
 our @ISA     = qw(Exporter);
 our @EXPORT  = qw(prFile
                   prPage
@@ -4391,14 +4391,16 @@ sub getPage
                $$$robj[oTYPE] = 'Font';
                $$$robj[oNAME] = $Font;
                if ((! exists $font{$Font}) 
-               && ($action eq 'print'))
+               && ($action))
                {  $fontNr++;
                   $font{$Font}[foINTNAMN]          = 'Ft' . $fontNr;
                   $font{$Font}[foORIGINALNR]       = $gammal;
                   $fontSource{$Font}[foSOURCE]     = $fSource;
                   $fontSource{$Font}[foORIGINALNR] = $gammal;
-                  $font{$Font}[foREFOBJ]   = $ny;
-                  $objRef{'Ft' . $fontNr} = $ny;
+                  if ($action eq 'print')
+                  {  $font{$Font}[foREFOBJ]  = $ny;
+                     $objRef{'Ft' . $fontNr} = $ny;
+                  }
                }   
             }
                

@@ -1,5 +1,8 @@
 Revision history for Perl extension PDF::Reuse.
 
+0.29 Mon May 10
+     A bug with fonts corrected, minor changes to the documentation.
+
 0.28 Fri Apr 23 2004
      New annotations, which are repeated on many pages, are defined only once.
      You can tie the request object to the output file, thanks to Matisse Enzer.
