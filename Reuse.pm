@@ -14,7 +14,7 @@ use autouse 'Compress::Zlib' => qw(compress($));
 use AutoLoader qw(AUTOLOAD);
 
 
-our $VERSION = '0.06';
+our $VERSION = '0.07';
 our @ISA     = qw(Exporter);
 our @EXPORT  = qw(prFile
                   prPage
@@ -313,7 +313,7 @@ sub prFile
    $genUpperY = 842;
    
    prPage(1);
-   $stream .= ' ';                
+   $stream = ' ';                
    if ($runfil)
    {  $filnamn = prep($filnamn);
       $log .= "File~$filnamn\n";
@@ -404,7 +404,7 @@ sub prAdd
    $stream .= "\n$contents\n";
    if ($runfil)
    {   $contents = prep($contents);
-       $log .= "Cs~$contents\n";
+       $log .= "Add~$contents\n";
    }
    $checkCs = 1;
    if (! $pos)
@@ -1128,9 +1128,11 @@ Look at any program in this documentation for an example.
 
 =item prBar ([$x, $y, $string])
 
-Prints a barfont pattern at the current page.
+Prints a bar font pattern at the current page.
 Returns $internalName for the font.
-$x and $y are coordinates in pixels and $string should consist of  zeroes and ones. 
+$x and $y are coordinates in pixels and $string should consist of the characters
+'0', '1' and '2' (or 'G'). '0' is a white bar, '1' is a dark bar. '2' and 'G' are
+dark, slightly longer bars, guard bars. 
 You can use e.g. GD::Barcode or one module in that group to calculate the barcode
 pattern. prBar "translates" the pattern to white and black bars.
 
@@ -1140,7 +1142,7 @@ pattern. prBar "translates" the pattern to white and black bars.
   
    prFile('myFile.pdf');
 
-   my $oGdB = GD::Barcode::Code39->new('JOHNDOE');
+   my $oGdB = GD::Barcode::Code39->new('JOHN DOE');
    my $sPtn = $oGdB->barcode();
    prBar(100, 600, $sPtn);
 
@@ -1148,11 +1150,11 @@ pattern. prBar "translates" the pattern to white and black bars.
 
 Internally the module uses a font for the bars, so you might want to change the font size before calling
 this function. In that case, use prFontSize() .
-If you you call this function without arguments it defines the barfont but does
+If you call this function without arguments it defines the bar font but does
 not write anything to the current page.
 
-Often you want more than just the bars, look in the tutorial at example ex23_pl,
-'Barcodes'.
+B<An easier and often better way to produce barcodes is to use PDF::Reuse::Barcode. 
+Look at that module!> 
 
 =item prCid ( $timeStamp )
 
@@ -1747,10 +1749,12 @@ because the interpreter hasn't come that far, when initiation is done.
 
 See prJs() for an example
 
-=item prJs ( $fileName )
+=item prJs ( $string|$fileName )
 
-To add JavaScript to your new document. B<$fileName> has to consist only of
+To add JavaScript to your new document. B<$string> has to consist only of
 JavaScript functions: function a (..){ ... } function b (..) { ...} and so on
+If B<$string> doesn't contain '{', B<$string> is interpreted as a filename.
+In that case the file has to consist only of JavaScript functions.
 
    use PDF::Reuse;
    use strict;
@@ -1781,20 +1785,9 @@ OO-code in the tutorial. It produces postscript which the Acrobat Distiller (you
 or Ghostscript can convert to PDF.(The commercial product, Mayura Draw 4.01 or something 
 higher can produce PDF-files straight away)
 
-If you want to produce bar codes, you might need some of these modules
+If you want to produce bar codes, you need
 
-   GD::Barcode
-   GD::Barcode::Code39
-   GD::Barcode::COOP2of5
-   GD::Barcode::EAN13
-   GD::Barcode::EAN8
-   GD::Barcode::IATA2of5
-   GD::Barcode::Industrial2of5
-   GD::Barcode::ITF
-   GD::Barcode::Matrix2of5
-   GD::Barcode::NW7
-   GD::Barcode::UPCA
-   GD::Barcode::UPCE
+   PDF::Reuse::Barcode
 
 If you want to import jpeg-images, you might need
 
@@ -2522,14 +2515,20 @@ sub prId
 sub prJs
 {   my $filNamnIn = shift;
     my $filNamn;
-       my $checkIdOld = $checkId;
-    ($filNamn, $checkId) = findGet($filNamnIn, $checkIdOld);
-    if (($runfil) && ($checkId) && ($checkId ne $checkIdOld))
-    {  $log .= "Cid~$checkId\n";
+    if ($filNamnIn !~ m'\{'os)
+    {  my $checkIdOld = $checkId;
+       ($filNamn, $checkId) = findGet($filNamnIn, $checkIdOld);
+       if (($runfil) && ($checkId) && ($checkId ne $checkIdOld))
+       {  $log .= "Cid~$checkId\n";
+       }
+       $checkId = '';
+    }
+    else
+    {  $filNamn = $filNamnIn;
     }
     if ($runfil)
-    {  $filnamn = prep($filNamn);
-       $log .= "Js~$filNamn\n";
+    {  my $filnamn = prep($filNamn);
+       $log .= "Js~$filnamn\n";
     }
     if ($interAktivSida)
     {  errLog("Too late, has already tried to merge JAVA SCRIPTS within an interactive page");
@@ -2537,15 +2536,13 @@ sub prJs
     elsif (! $pos)
     {  errLog("Too early for JAVA SCRIPTS, create a file first"); 
     }
-
-    $checkId = '';
     push @jsfiler, $filNamn;
     1;
 }
 
 sub prInit
 {   my $initText = shift;
-    my @fall = ($initText =~ m'([\w\d\_\$]+)\s*\([\w\s\,\d\.]*\)'gs);
+    my @fall = ($initText =~ m'([\w\d\_\$]+)\s*\(.*?\)'gs);
     for (@fall)
     {  if (! exists $initScript{$_})
        { $initScript{$_} = 0; 
@@ -4675,13 +4672,17 @@ sub skrivJS
 sub inkludera
 {   my $jsfil = shift;
     my $fil;
-    open (JSFIL, "<$jsfil") || return;
-    while (<JSFIL>)
-    { $fil .= $_;}
+    if ($jsfil !~ m'\{'os)
+    {   open (JSFIL, "<$jsfil") || return;
+        while (<JSFIL>)
+        { $fil .= $_;}
 
-    close JSFIL;
-
-    $fil =~ s|(function)\s+([\w\_\d\$]+)\s*\(([\w\s\,]*)\)\s*\{|"zXyZcUt $1 $2 \($3\)\n\{"|esg;
+        close JSFIL;
+    }
+    else
+    {  $fil = $jsfil;
+    }
+    $fil =~ s|function\s+([\w\_\d\$]+)\s*\(|"zXyZcUt function $1 ("|sge;
     my @funcs = split/zXyZcUt /, $fil;
     for my $kod (@funcs)
     {   if ($kod =~ m'^function ([\w\_\d\$]+)'os)
