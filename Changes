@@ -1,5 +1,8 @@
 Revision history for Perl extension PDF::Reuse.
 
+0.24 Tue Mar 9 2004
+     Corrected a warning about when JavaScripts can be added to a document
+
 0.23 Tue Feb 3 2004
      Added warnings in the documentation about JavaScript and webpdf.api
 

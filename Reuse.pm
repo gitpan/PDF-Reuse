@@ -16,7 +16,7 @@ use autouse 'Compress::Zlib' => qw(compress($)
 use autouse 'Data::Dumper'   => qw(Dumper);
 use AutoLoader qw(AUTOLOAD);
 
-our $VERSION = '0.23';
+our $VERSION = '0.24';
 our @ISA     = qw(Exporter);
 our @EXPORT  = qw(prFile
                   prPage
@@ -1472,7 +1472,10 @@ PDF-file, and you can refer to them with the new name you receive.
 
 B<$fieldName> is an interactive field in the document you are creating.
 It has to be spelled exactly the same way here as it spelled in the document.
-B<$value> is what you want to assigned to the field. 
+B<$value> is what you want to assigned to the field.
+Put all your sentences with prField early in your script. After prFile and B<before>
+prDoc or prDocForm and of course before prEnd. Each sentence with prField is 
+translated to JavaScript and merged with old JavaScript  
 
 See prDocForm() for an example
 
@@ -2152,7 +2155,7 @@ restored.
    PDF::Reuse::Tutorial
    PDF::Reuse::Barcode
    PDF::Reuse::Scramble
-   PDF::Reuse::SimpleChart
+   PDF::Reuse::OverlayChart
 
 To program with PDF-operators, look at "The PDF-reference Manual" which probably
 is possible to download from http://partners.adobe.com/asn/developer/acrosdk/docs.html
@@ -2595,7 +2598,7 @@ sub prMbox
 
 sub prField
 {  my ($fieldName, $fieldValue) = @_;
-   if ($interAktivSida)
+   if (($interAktivSida) || ($interActive))
    {  errLog("Too late, has already tried to INITIATE FIELDS within an interactive page");
    }
    elsif (! $pos)
@@ -3212,7 +3215,7 @@ sub prJs
     {  my $filnamn = prep($filNamn);
        $log .= "Js~$filnamn\n";
     }
-    if ($interAktivSida)
+    if (($interAktivSida) || ($interActive))
     {  errLog("Too late, has already tried to merge JAVA SCRIPTS within an interactive page");
     }
     elsif (! $pos)
@@ -3239,7 +3242,7 @@ sub prInit
     {   $initText = prep($initText);
         $log .= "Init~$initText~$duplicate\n";
     }
-    if ($interAktivSida)
+    if (($interAktivSida) || ($interActive))
     {  errLog("Too late, has already tried to create INITIAL JAVA SCRIPTS within an interactive page");
     }
     elsif (! $pos)
@@ -5601,8 +5604,8 @@ sub errLog
     my $lrunfil = $runfil || 'undef'; 
     open (ERRLOG, ">$errLog") || croak "$mess can't open an error logg, $!";
     print ERRLOG "\n$mess\n\n";
-    print ERRLOG Carp::longmess("The error occured when executing:\n");
-    print ERRLOG "\nSituation when the error occured\n\n";
+    print ERRLOG Carp::longmess("The error occurred when executing:\n");
+    print ERRLOG "\nSituation when the error occurred\n\n";
     print ERRLOG "   Bytes written to the current pdf-file,    pos    = $lpos\n";
     print ERRLOG "   Object processed, not necessarily written objNr  = $lobjNr\n";
     print ERRLOG "   Current pdf-file,                         utfil  = $lutfil\n";
@@ -5614,6 +5617,6 @@ sub errLog
     if (($pos) && ($pos < 15000000))
     {  prEnd();
     }
-    print STDERR Carp::shortmess("An error occured \n");
+    print STDERR Carp::shortmess("An error occurred \n");
     croak "$endMess\n";      
 }
