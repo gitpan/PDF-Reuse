@@ -1,5 +1,9 @@
 Revision history for Perl extension PDF::Reuse.
 
+0.27 Fri Apr 16 2004
+     A potential bug with links removed. Repeated links are stored only once.
+     Unnecessary linefeeds removed.
+
 0.26 Thu Apr 15 2004
      Bugs fixed. When an image was imported, the program could become confused
 	  about standard fonts. Importing of JavaScrips failed. Corrected.

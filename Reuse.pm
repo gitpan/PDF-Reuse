@@ -16,7 +16,7 @@ use autouse 'Compress::Zlib' => qw(compress($)
 use autouse 'Data::Dumper'   => qw(Dumper);
 use AutoLoader qw(AUTOLOAD);
 
-our $VERSION = '0.26';
+our $VERSION = '0.27';
 our @ISA     = qw(Exporter);
 our @EXPORT  = qw(prFile
                   prPage
@@ -337,6 +337,7 @@ sub prFile
    %old         = ();
    %behandlad   = ();
    @bookmarks   = ();
+   %links       = ();
    undef $defGState;
    undef $interActive;
    undef $NamesSaved;
@@ -677,8 +678,8 @@ sub prDefaultGrState
    }
 
    $objekt[$objNr] = $pos;
-   my $utrad = "$objNr 0 obj\n" . '<</Type/ExtGState/SA false/SM 0.02/TR2 /Default'
-           . ">>\nendobj\n";
+   my $utrad = "$objNr 0 obj" . '<</Type/ExtGState/SA false/SM 0.02/TR2 /Default'
+           . ">>endobj\n";
    $pos += syswrite UTFIL, $utrad;
    $objRef{'Gs0'} = $objNr;
    return ('Gs0', $defGState);
@@ -701,8 +702,8 @@ sub findFont()
       {  $objNr++;
          $fontNr++;
          my $fontAbbr           = 'Ft' . $fontNr; 
-         my $fontObjekt         = "$objNr 0 obj\n<</Type/Font/Subtype/Type1" .
-                               "/BaseFont/$Font/Encoding/WinAnsiEncoding>>\nendobj\n";
+         my $fontObjekt         = "$objNr 0 obj<</Type/Font/Subtype/Type1" .
+                               "/BaseFont/$Font/Encoding/WinAnsiEncoding>>endobj\n";
          $font{$Font}[foINTNAMN]      = $fontAbbr; 
          $font{$Font}[foREFOBJ]       = $objNr;
          $objRef{$fontAbbr}           = $objNr;
@@ -719,8 +720,8 @@ sub findFont()
          {   $objNr++;
              $fontNr++;
              my $fontAbbr           = 'Ft' . $fontNr; 
-             my $fontObjekt         = "$objNr 0 obj\n<</Type/Font/Subtype/Type1" .
-                                      "/BaseFont/$Font/Encoding/WinAnsiEncoding>>\nendobj\n";
+             my $fontObjekt         = "$objNr 0 obj<</Type/Font/Subtype/Type1" .
+                                      "/BaseFont/$Font/Encoding/WinAnsiEncoding>>endobj\n";
              $font{$Font}[foINTNAMN]    = $fontAbbr; 
              $font{$Font}[foREFOBJ]     = $objNr;
              $objRef{$fontAbbr}         = $objNr;
@@ -848,7 +849,7 @@ sub skrivSida
        }
        $resursObjekt   = $objNr;
        $objekt[$objNr] = $pos;
-       $resursDict     = "$objNr 0 obj\n<<$resursDict>>\nendobj\n";
+       $resursDict     = "$objNr 0 obj<<$resursDict>>endobj\n";
        $pos += syswrite UTFIL, $resursDict ;
     }
     my $sidObjekt;
@@ -895,7 +896,7 @@ sub skrivSida
            $stream = "\nq\n1 0 0 1 $devX $devY cm\n/Xwq Do\nq\n";
            $langd = length($stream);
            $confuseObj = $objNr;
-           $stream = "$objNr 0 obj\n<</Length $langd>>\nstream\n" . "$stream";
+           $stream = "$objNr 0 obj<</Length $langd>>stream\n" . "$stream";
            $stream .= "\nendstream\nendobj\n";
            $pos += syswrite UTFIL, $stream;
         }
@@ -909,14 +910,14 @@ sub skrivSida
         $objNr++;
         $objekt[$objNr] = $pos; 
         if (! $compressFlag)
-        {  $streamObjekt  = "$objNr 0 obj\n<</Length $langd>>\nstream\n" . $stream;
+        {  $streamObjekt  = "$objNr 0 obj<</Length $langd>>stream\n" . $stream;
            $streamObjekt .= "\nendstream\nendobj\n";
         }
         else
         {  $stream = "\n" . $stream . "\n";
            $langd++;
 
-           $streamObjekt  = "$objNr 0 obj\n<</Filter/FlateDecode"
+           $streamObjekt  = "$objNr 0 obj<</Filter/FlateDecode"
                              . "/Length $langd>>stream" . $stream;
            $streamObjekt .= "endstream\nendobj\n";
         }
@@ -927,7 +928,7 @@ sub skrivSida
         # Så skapas och skrivs sidobjektet 
         ##################################
 
-        $sidObjekt = "$sidObjNr 0 obj\n<</Type/Page/Parent $parent 0 R/Contents $streamObjekt 0 R"
+        $sidObjekt = "$sidObjNr 0 obj<</Type/Page/Parent $parent 0 R/Contents $streamObjekt 0 R"
                       . "/MediaBox \[$genLowerX $genLowerY $genUpperX $genUpperY\]"
                       . "/Resources $resursObjekt 0 R";
     }
@@ -938,13 +939,13 @@ sub skrivSida
     if ((@annots) 
     || (defined @{$links{'-1'}}) 
     || (defined @{$links{$tSida}}))
-    {  $sidObjekt .= "/Annots " . mergeLinks() . ' 0 R';
+    {  $sidObjekt .= '/Annots ' . mergeLinks() . ' 0 R';
     }
     if (defined $AAPageSaved)
     {  $sidObjekt .= "/AA $AAPageSaved";
        undef $AAPageSaved;
     }
-    $sidObjekt .= ">>\nendobj\n";
+    $sidObjekt .= ">>endobj\n";
     $objekt[$sidObjNr] = $pos;
     $pos += syswrite UTFIL, $sidObjekt;
     push @{$kids[0]}, $sidObjNr;
@@ -971,7 +972,7 @@ sub prEnd
     {  $objNr--;                   # reserverat sidobjektnr utnyttjades aldrig
     }
     
-    my $utrad = "1 0 obj\n<</Type/Catalog/Pages $slutNod 0 R";
+    my $utrad = "1 0 obj<</Type/Catalog/Pages $slutNod 0 R";
     if (defined $NamesSaved)
     {  $utrad .= "\/Names $NamesSaved 0 R\n"; 
     }
@@ -1019,7 +1020,7 @@ sub prEnd
         $utrad .= '>> ';
     }
  
-    $utrad .= ">>\nendobj\n";
+    $utrad .= ">>endobj\n";
 
     $objekt[1] = $pos;
     $pos += syswrite UTFIL, $utrad;
@@ -1082,7 +1083,7 @@ sub ordnaNoder
       }
       
       my $nodObjekt;
-      $nodObjekt = "$parents[$i] 0 obj\n<</Type/Pages/Parent $parents[$j] 0 R\n/Kids $vektor\n/Count $counts[$i]\n>>\nendobj\n";
+      $nodObjekt = "$parents[$i] 0 obj<</Type/Pages/Parent $parents[$j] 0 R\n/Kids $vektor\n/Count $counts[$i]>>endobj\n";
       
       $objekt[$parents[$i]] = $pos;
       $pos += syswrite UTFIL, $nodObjekt;
@@ -1126,7 +1127,7 @@ sub skrivUtNoder
             }
          }
       
-         $nodObjekt = "$parents[$i] 0 obj\n<</Type/Pages/Parent $nod 0 R\n/Kids $vektor\n/Count $counts[$i]>>\nendobj\n";
+         $nodObjekt = "$parents[$i] 0 obj<</Type/Pages/Parent $nod 0 R\n/Kids $vektor/Count $counts[$i]>>endobj\n";
       
          $objekt[$parents[$i]] = $pos;
          $pos += syswrite UTFIL, $nodObjekt;
@@ -1139,9 +1140,9 @@ sub skrivUtNoder
    for (@{$kids[$si]})
    {  $vektor .= "$_ 0 R "; }
    $vektor .= ']';
-   $nodObjekt  = "$slutNod 0 obj\n<</Type/Pages\n/Kids $vektor\n/Count $counts[$si]";
+   $nodObjekt  = "$slutNod 0 obj<</Type/Pages/Kids $vektor/Count $counts[$si]";
    $nodObjekt .= "/MediaBox \[$genLowerX $genLowerY $genUpperX $genUpperY\]";
-   $nodObjekt .= " >>\nendobj\n";
+   $nodObjekt .= " >>endobj\n";
    $objekt[$slutNod] = $pos;
    $pos += syswrite UTFIL, $nodObjekt;
           
@@ -2505,16 +2506,25 @@ sub prLink
 sub mergeLinks
 {   my $tSida = $sida + 1;
     my $rad;
+    my ($linkObject, $linkObjectNo);
     for my $link (@{$links{'-1'}}, @{$links{$tSida}} )
     {   my $x2 = $link->{x} + $link->{width};
         my $y2 = $link->{y} + $link->{height};
+        if (exists $links{$link->{URI}})
+        {   $linkObjectNo = $links{$link->{URI}};
+        }
+        else
+        {   $objNr++;
+            $objekt[$objNr] = $pos;
+            $rad = "$objNr 0 obj<</S/URI/URI($link->{URI})>>endobj\n";
+            $linkObjectNo = $objNr;
+            $links{$link->{URI}} = $objNr;
+            $pos += syswrite UTFIL, $rad;
+        }
         $objNr++;
         $objekt[$objNr] = $pos;
-        $rad = "$objNr 0 obj\n<<\n" .
-        "/Type /Annot /Subtype /Link\n" .
-        "/Rect [ $link->{x} $link->{y} $x2 $y2 ]\n" .
-        "/A <</S /URI\n/URI ($link->{URI})>>\n" .
-        "/Border [0 0 0]/H /I>>\nendobj\n";
+        $rad = "$objNr 0 obj<</Subtype/Link/Rect[$link->{x} $link->{y} "
+             . "$x2 $y2]/A $linkObjectNo 0 R/Border[0 0 0]>>endobj\n";
         $pos += syswrite UTFIL, $rad;
         push @annots, $objNr;
     }
@@ -2522,11 +2532,11 @@ sub mergeLinks
     @{$links{$tSida}} = ();
     $objNr++;
     $objekt[$objNr] = $pos;
-    $rad = "$objNr 0 obj\n[\n";
+    $rad = "$objNr 0 obj[\n";
     for (@annots)
     {  $rad .= "$_ 0 R\n";
     }
-    $rad .= "]\nendobj\n";
+    $rad .= "]endobj\n";
     $pos += syswrite UTFIL, $rad;
     @annots = ();
     return $objNr;
@@ -2632,16 +2642,16 @@ sub ordnaBookmarks
 
     $objekt[$me] = $pos;
 
-    $rad = "$me 0 obj\n<<\n";
-    $rad .= "/Type /Outlines\n";
-    $rad .= "/Count $totalCount\n";
+    $rad = "$me 0 obj<<";
+    $rad .= "/Type/Outlines";
+    $rad .= "/Count $totalCount";
     if (defined $first)
-    {  $rad .= "/First $first 0 R\n";
+    {  $rad .= "/First $first 0 R";
     }
     if (defined $last)
-    {  $rad .= "/Last $last 0 R\n";
+    {  $rad .= "/Last $last 0 R";
     }
-    $rad .= ">>\nendobj\n";
+    $rad .= ">>endobj\n";
     $pos += syswrite UTFIL, $rad;
 
     return $me;
@@ -2703,38 +2713,38 @@ sub descend
      } 
 
      $objekt[$me] = $pos;
-     $rad = "$me 0 obj\n<<\n";
+     $rad = "$me 0 obj<<";
      if (exists $entry{'text'})
-     {   $rad .= "/Title ($entry{'text'})\n";
+     {   $rad .= "/Title ($entry{'text'})";
      }
-     $rad .= "/Parent $parent 0 R\n";
+     $rad .= "/Parent $parent 0 R";
      if (defined $jsObj)
-     {  $rad .= "/A $jsObj 0 R\n";
+     {  $rad .= "/A $jsObj 0 R";
      }
      if (exists $entry{'previous'})
-     {  $rad .= "/Prev $entry{'previous'} 0 R\n";
+     {  $rad .= "/Prev $entry{'previous'} 0 R";
      }
      if (exists $entry{'next'})
-     {  $rad .= "/Next $entry{'next'} 0 R\n";
+     {  $rad .= "/Next $entry{'next'} 0 R";
      }
      if (defined $first)
-     {  $rad .= "/First $first 0 R\n";
+     {  $rad .= "/First $first 0 R";
      }
      if (defined $last)
-     {  $rad .= "/Last $last 0 R\n";
+     {  $rad .= "/Last $last 0 R";
      }
      if ($count != $totalCount)
      {   $count = $totalCount - $count;
-         $rad .= "/Count $count\n";
+         $rad .= "/Count $count";
      }
      if (exists $entry{'color'})
-     {   $rad .= "/C [$entry{'color'}]\n";
+     {   $rad .= "/C [$entry{'color'}]";
      }
      if (exists $entry{'style'})
-     {   $rad .= "/F $entry{'style'}\n";
+     {   $rad .= "/F $entry{'style'}";
      }
 
-     $rad .= ">>\nendobj\n";
+     $rad .= ">>endobj\n";
      $pos += syswrite UTFIL, $rad;
 }  
 
@@ -4285,7 +4295,7 @@ sub getPage
           if ($res)
           { $$$robj[oKIDS] = 1; }
           if ($action eq 'print')
-          {   $utrad  = "$referens 0 obj\n" . "$nyDel1" . "\n>>\nstream";
+          {   $utrad  = "$referens 0 obj\n" . "$nyDel1" . ">>\nstream";
               $del2   = substr($objektet, $strPos);
               $utrad .= $del2;
               $pos   += syswrite UTFIL, $utrad;
@@ -5255,7 +5265,7 @@ sub extractObject
                                  unless (! defined  $kids);
        
          if (defined $$del2)          
-         {  $utrad = "$ny 0 obj\n<<" . $$del1 . $$del2;
+         {  $utrad = "$ny 0 obj<<" . $$del1 . $$del2;
          }
          else
          {  $utrad = "$ny 0 obj " . $$del1;
@@ -5448,7 +5458,7 @@ sub analysera
             $strPos = length($2) + length($3) + length($1);
             $del1 =~ s/\b(\d+)\s{1,2}\d+\s{1,2}R\b/xform() . ' 0 R'/oegs;
             $objekt[$ny] = $pos;
-            $utrad = "$ny 0 obj\n<<" . "$del1" . '>>stream';
+            $utrad = "$ny 0 obj<<" . "$del1" . '>>stream';
             $del2   = substr($objektet, $strPos);
             $utrad .= $del2; 
 
@@ -5461,7 +5471,7 @@ sub analysera
             }
             $objektet =~ s/\b(\d+)\s{1,2}\d+\s{1,2}R\b/xform() . ' 0 R'/oegs;
             $objekt[$ny] = $pos;
-            $utrad = "$ny 0 obj\n$objektet";
+            $utrad = "$ny 0 obj$objektet";
             $pos += syswrite UTFIL, $utrad;
          }
       }
@@ -5532,12 +5542,12 @@ sub sidAnalys
    {  $del1 .= $Annots;
    }
 
-   $utrad = "$ny 0 obj\n<<$del1\n" . '>>';
+   $utrad = "$ny 0 obj<<$del1>>";
    if (defined $del2)
    {   $utrad .= "stream\n$del2";
    }
    else
-   {  $utrad .= "\nendobj\n";
+   {  $utrad .= "endobj\n";
    }
 
    $objekt[$ny] = $pos;
@@ -5698,7 +5708,7 @@ sub behandlaNames
       $obj .= "$nyttNr 0 R\n";      
       $antal++;
       if ($antal > 9)
-      {   $obj .= ' ]/Limits [(' . "$low" . ')(' . "$high" . ')] >>' . "\nendobj\n";
+      {   $obj .= ' ]/Limits [(' . "$low" . ')(' . "$high" . ')] >>' . "endobj\n";
           $pos += syswrite UTFIL, $obj;
           push @nod0, \[$ny, $low, $high];
           $antNod0++; 
@@ -5707,7 +5717,7 @@ sub behandlaNames
       }
    }
    if ($antal)
-   {   $obj .= ']/Limits [(' . $low . ')(' . $high . ')]>>' . "\nendobj\n";
+   {   $obj .= ']/Limits [(' . $low . ')(' . $high . ')]>>' . "endobj\n";
        $pos += syswrite UTFIL, $obj;
        push @nod0, \[$ny, $low, $high];
        $antNod0++;
@@ -5727,7 +5737,7 @@ sub behandlaNames
            $obj .= " $$entry->[0] 0 R";
            $antal++;
            if ($antal > 9)
-           {   $obj .= ']/Limits [(' . $low . ')(' . $high . ')]>>' . "\nendobj\n";
+           {   $obj .= ']/Limits [(' . $low . ')(' . $high . ')]>>' . "endobj\n";
                $pos += syswrite UTFIL, $obj;
                push @nodUpp, \[$objNr, $low, $high];
                $antNodUpp++; 
@@ -5737,11 +5747,11 @@ sub behandlaNames
        }
        if ($antal > 0)
        {   if ($antNodUpp == 0)     # inget i noderna över
-           {   $obj .= ']>>' . "\nendobj\n";
+           {   $obj .= ']>>' . "endobj\n";
                $pos += syswrite UTFIL, $obj;
            }
            else
-           {   $obj .= ']/Limits [(' . "$low" . ')(' . "$high" . ')]>>' . "\nendobj\n";
+           {   $obj .= ']/Limits [(' . "$low" . ')(' . "$high" . ')]>>' . "endobj\n";
                $pos += syswrite UTFIL, $obj;
                push @nodUpp, \[$objNr, $low, $high];
                $antNodUpp++; 
@@ -5765,7 +5775,7 @@ sub behandlaNames
    $objNr++;
    $ny = $objNr;
    $objekt[$ny] = $pos;
-   $objektet = "$ny 0 obj\n<<" . $objektet . ">>\nendobj\n";
+   $objektet = "$ny 0 obj<<" . $objektet . ">>endobj\n";
    $pos += syswrite UTFIL, $objektet;
    return $ny;
 }
@@ -5818,15 +5828,15 @@ sub skrivJS
       $pos += syswrite UTFIL, $obj;
       $objNr++;
       $objekt[$objNr] = $pos;
-      $obj = "$objNr 0 obj<</S /JavaScript\n/JS $spar 0 R >>endobj\n";
+      $obj = "$objNr 0 obj<</S/JavaScript/JS $spar 0 R >>endobj\n";
    }
    else
    {  $kod =~ s'\('\\('gso;
       $kod =~ s'\)'\\)'gso;
       $objNr++;
       $objekt[$objNr] = $pos;
-      $obj = "$objNr 0 obj<</S /JavaScript\n/JS " . '(' . $kod . ')';
-      $obj .= "\n>>\nendobj\n";
+      $obj = "$objNr 0 obj<</S/JavaScript/JS " . '(' . $kod . ')';
+      $obj .= ">>endobj\n";
    }
    $pos += syswrite UTFIL, $obj;           
    return $objNr;
