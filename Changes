@@ -1,5 +1,10 @@
 Revision history for Perl extension PDF::Reuse.
 
+0.21 Fri Dec 26 2003
+     -prFontSize will accept sizes with decimal point. 
+     -The constant IS_MODPERL has been added. It is taken from $ENV{MOD_PERL}.
+      If it is set, STDOUT can be tied to Apache.
+
 0.20 Sun Dec 14 2003
      -You can extract pages or split documents with the help of two
      new parameters to prDoc. 

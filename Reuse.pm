@@ -16,7 +16,7 @@ use autouse 'Compress::Zlib' => qw(compress($)
 use autouse 'Data::Dumper'   => qw(Dumper);
 use AutoLoader qw(AUTOLOAD);
 
-our $VERSION = '0.20';
+our $VERSION = '0.21';
 our @ISA     = qw(Exporter);
 our @EXPORT  = qw(prFile
                   prPage
@@ -135,6 +135,12 @@ use constant   foEXTNAMN    => 2;
 use constant   foORIGINALNR => 3;
 use constant   foSOURCE     => 4;
 
+##########
+# Övrigt
+##########
+
+use constant IS_MODPERL => $ENV{MOD_PERL};
+
 our $xScale   = 1;
 our $yScale   = 1;
 our $touchUp  = 1;
@@ -208,7 +214,7 @@ sub prFont
 sub prFontSize
 {   my $fSize = shift || 12;
     my $oldFontSize = $fontSize;
-    if ($fSize !~ m'\D')
+    if ($fSize =~ m'\d+\.?\d*'o)
     { $fontSize = $fSize;
       if ($runfil)
       {  $log .= "FontSize~$fontSize\n";
@@ -253,12 +259,16 @@ sub prFile
               }
           }
        }
-
    }
    else
    {   $utfil = $filnamn;
    }
-   open (UTFIL, ">$utfil") || errLog("Couldn't open file $utfil, $!");
+   if (IS_MODPERL && $utfil eq '-')
+   { tie *UTFIL, 'Apache';
+   }
+   else
+   { open (UTFIL, ">$utfil") || errLog("Couldn't open file $utfil, $!");
+   }
    binmode UTFIL;
    my $utrad = "\%PDF-1.4\n\%\â\ã\Ï\Ó\n";
    
@@ -1218,7 +1228,7 @@ This function is intended to give you detail control at a low level.
 Defines a "bookmark". $reference refers to a hash or array of hashes which look
 something like this:
  
-          {  text  => 'Dokument',
+          {  text  => 'Document',
              act   => 'this.pageNum = 0; this.scroll(40, 500);',
              kids  => [ { text => 'Chapter 1',
                           act  => '1, 40, 600'
