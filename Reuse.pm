@@ -13,7 +13,7 @@ use autouse 'Carp' => qw(carp
 use autouse 'Compress::Zlib' => qw(compress);
 use SelfLoader;
 
-our $VERSION = '0.02';
+our $VERSION = '0.03';
 our @ISA     = qw(Exporter);
 our @EXPORT  = qw(prFile
                   prPage
@@ -229,10 +229,17 @@ sub prFile
    {  prEnd();
       close UTFIL;
    }
-      
    $filnamn = shift;
-   $utfil  = $ddir . $filnamn;
-   my $ri = rindex($utfil,'/');
+   my $kortNamn;
+   my $ri  = rindex($filnamn,'/');
+   if ($ri > 0)
+   {  $kortNamn = substr($filnamn, ($ri + 1));
+      $utfil = $ddir ? $ddir . $kortNamn : $filnamn; 
+   }
+   else
+   {  $utfil = $ddir ? $ddir . $filnamn : $filnamn;
+   }
+   $ri = rindex($utfil,'/');
    if ($ri > 0)
    {   my $dirdel = substr($utfil,0,$ri);
        if (! -e $dirdel)
@@ -256,10 +263,15 @@ sub prFile
    $pos   = syswrite UTFIL, $utrad; 
 
    if (defined $ldir)
-    {   $runfil = $ldir . $filnamn  . '.dat';
-        open (RUNFIL, ">$runfil") || errLog("Couldn't open loggfile $runfil, $!");
-        $log .= "Vers~$VERSION\n";        
-    }
+   {   if ($kortNamn)
+       {  $runfil = $ldir . $kortNamn  . '.dat';
+       }
+       else
+       {  $runfil = $ldir . $filnamn  . '.dat';
+       }
+       open (RUNFIL, ">$runfil") || errLog("Couldn't open loggfile $runfil, $!");
+       $log .= "Vers~$VERSION\n";        
+   }
 
    
    @parents     = ();
@@ -2546,7 +2558,7 @@ sub byggForm
    ####################################################   
 
    for my $key (@{$fData[fNOKIDS]})
-   {   if (exists $old{$key})                 # already processed
+   {   if ((defined $old{$key}) && ($objekt[$old{$key}]))    # already processed
        {  next;
        }
        #########################################
@@ -2555,26 +2567,30 @@ sub byggForm
        
        my @oD = @{$oHash{$key}};   
 
-       $old{$key} = ++$objNr;
-       $objekt[$objNr] = $pos;
+       if (! defined $old{$key})
+       {  $old{$key} = ++$objNr;
+       }
+       $nr = $old{$key};
+       
+       $objekt[$nr] = $pos;
        
        sysseek INFIL, $oD[oPOS], 0;
        sysread INFIL, $del1, $oD[oSIZE];
        
        if (defined $oD[oSTREAMP])
-       {  $utrad = "$objNr 0 obj\n<<" . $del1; }
+       {  $utrad = "$nr 0 obj\n<<" . $del1; }
        else
        {  if ($oD[oTYPE] eq 'Font')
           {  my $Font = $oD[oNAME];
              if (! defined $font{$Font}[foINTNAMN])
              {  $fontNr++;
                 $font{$Font}[foINTNAMN]  = 'Ft' . $fontNr;
-                $font{$Font}[foREFOBJ]   = $objNr;
-                $objRef{'Ft' . $fontNr} = $objNr;
+                $font{$Font}[foREFOBJ]   = $nr;
+                $objRef{'Ft' . $fontNr}  = $nr;
              }
           }   
           
-          $utrad = "$objNr 0 obj" . $del1;     
+          $utrad = "$nr 0 obj" . $del1;     
        }
        $pos += syswrite UTFIL, $utrad;     
    }
@@ -2583,13 +2599,15 @@ sub byggForm
    # Objekt med referenser kopieras, behandlas och skrivs
    #######################################################
    for my $key (@{$fData[fKIDS]})
-   {   if (exists $old{$key})        # already processed
+   {   if ((defined $old{$key}) && ($objekt[$old{$key}]))  # already processed
        {  next;
        }
        my @oD = @{$oHash{$key}};
  
-       $nr = ++$objNr;
-       $old{$key} = $nr;
+       if (! defined $old{$key})
+       {  $old{$key} = ++$objNr;
+       }
+       $nr = $old{$key};
        
        $objekt[$nr] = $pos;
        

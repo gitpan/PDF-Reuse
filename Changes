@@ -7,3 +7,9 @@ Revision history for Perl extension PDF::Reuse.
 0.02  Fri Apr 25 20:49:50 2003
    - I had to put all PDF documents and generated modules used in the examples 
      in a zipfile, to hide them from the normal processing around the upload to CPAN.
+
+0.03 Tue Apr 29 16:50:00 2003
+   - Corrected an error that occured when a form was used many times in different
+     documents. (Translation of old => new object number)
+   - Some preparations for using PDF::Reuse as an COM-object (ActiveX object)
+     (In version 0.02 of PDF::Reuse::Tutorial there will be examples)
