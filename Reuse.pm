@@ -16,7 +16,7 @@ use autouse 'Compress::Zlib' => qw(compress($)
 use autouse 'Data::Dumper'   => qw(Dumper);
 use AutoLoader qw(AUTOLOAD);
 
-our $VERSION = '0.24';
+our $VERSION = '0.25';
 our @ISA     = qw(Exporter);
 our @EXPORT  = qw(prFile
                   prPage
@@ -37,8 +37,6 @@ our @EXPORT  = qw(prFile
                   prAdd
                   prBar
                   prText
-                  prMoveTo
-                  prScale
                   prDocDir
                   prLogDir
                   prLog
@@ -50,23 +48,24 @@ our @EXPORT  = qw(prFile
                   prTouchUp
                   prCompress
                   prMbox
-                  prBookmark);
+                  prBookmark
+                  prStrWidth
+                  prLink);
 
-our ($utfil, $slutNod, $formCont, $imSeq, $duplicateInits,
-    $page, $Annots, $Names, $AARoot, $AAPage, $sidObjNr,  
-    $AcroForm, $interActive, $NamesSaved, $AARootSaved, $AAPageSaved, $root,
-    $AcroFormSaved, $AnnotsSaved, $id, $ldir, $checkId, $formNr, $imageNr, 
+our ($utfil, $slutNod, $formCont, $imSeq, $duplicateInits, $page, $sidObjNr, $sida,
+    $interActive, $NamesSaved, $AARootSaved, $AAPageSaved, $root,
+    $AcroFormSaved, $id, $ldir, $checkId, $formNr, $imageNr, 
     $filnamn, $interAktivSida, $taInterAkt, $type, $runfil, $checkCs,
-    $confuseObj, $compress,$pos, $fontNr, $objNr, $xPos, $yPos,
+    $confuseObj, $compress, $pos, $fontNr, $objNr,
     $defGState, $gSNr, $pattern, $shading, $colorSpace, $totalCount);
  
 our (@kids, @counts, @formBox, @objekt, @parents, @aktuellFont, @skapa,
-    @jsfiler, @inits, @bookmarks);
+    @jsfiler, @inits, @bookmarks, @annots);
  
 our ( %old, %oldObject, %resurser, %form, %image, %objRef, %nyaFunk, %fontSource, 
      %sidFont, %sidXObject, %sidExtGState, %font, %intAct, %fields, %script, 
      %initScript, %sidPattern, %sidShading, %sidColorSpace, %knownToFile,
-     %processed, %embedded, %dummy, %behandlad, %unZipped);
+     %processed, %embedded, %dummy, %behandlad, %unZipped, %links, %prefs);
 
 our $stream  = '';
 our $idTyp   = '';
@@ -141,8 +140,6 @@ use constant   foSOURCE     => 4;
 
 use constant IS_MODPERL => $ENV{MOD_PERL};
 
-our $xScale   = 1;
-our $yScale   = 1;
 our $touchUp  = 1;
 
 our %stdFont = 
@@ -159,7 +156,7 @@ our %stdFont =
         'Helvetica-Oblique'     => 'Helvetica-Oblique',
         'Helvetica-BoldOblique' => 'Helvetica-BoldOblique',
         'Symbol'                => 'Symbol',
-        'ZapfDingbats'          => 'ZapfDingbats',
+        'ZapfDingbats'          => 'ZapfDingbats', 
         'TR'  => 'Times-Roman',
         'TB'  => 'Times-Bold',
         'TI'  => 'Times-Italic',
@@ -232,7 +229,31 @@ sub prFile
    {  prEnd();
       close UTFIL;
    }
-   $filnamn = shift || '-';
+   %prefs = ();
+   my $param = shift;
+   if (ref($param) eq 'HASH')
+   {  $filnamn  = '-';
+      for (keys %{$param})
+      {   my $key = lc($_);
+          if ($key eq 'name')
+          {  $filnamn = $param->{$_}; }
+          elsif (($key eq 'hidetoolbar')
+          ||     ($key eq 'hidemenubar')
+          ||     ($key eq 'hidewindowui')
+          ||     ($key eq 'fitwindow')
+          ||     ($key eq 'centerwindow'))
+          {  $prefs{$key} = $param->{$_};
+          }
+      }    
+   }
+   else
+   {  $filnamn  = $param || '-';
+      $prefs{hidetoolbar}  = $_[1]  if defined $_[1];
+      $prefs{hidemenubar}  = $_[2]  if defined $_[2];
+      $prefs{hidewindowui} = $_[3]  if defined $_[3];
+      $prefs{fitwindow}    = $_[4]  if defined $_[4];
+      $prefs{centerwindow} = $_[5]  if defined $_[5];
+   }
    my $kortNamn;
    if ($filnamn ne '-')
    {   my $ri  = rindex($filnamn,'/');
@@ -303,6 +324,7 @@ sub prFile
    $pattern     = 0;
    $shading     = 0;
    $colorSpace  = 0;
+   $sida        = 0;
    %font        = ();
    %resurser    = ();
    %fields      = ();
@@ -333,7 +355,12 @@ sub prFile
    $stream = ' ';                
    if ($runfil)
    {  $filnamn = prep($filnamn);
-      $log .= "File~$filnamn\n";
+      $log .= "File~$filnamn";
+      $log .= (exists $prefs{hidetoolbar}) ? "~$prefs{hidetoolbar}" : '~';
+      $log .= (exists $prefs{hidemenubar}) ? "~$prefs{hidemenubar}" : '~';
+      $log .= (exists $prefs{hidewindowui}) ? "~$prefs{hidewindowui}" : '~';
+      $log .= (exists $prefs{fitwindow}) ? "~$prefs{fitwindow}" : '~';
+      $log .= (exists $prefs{centerwindow}) ? "~$prefs{centerwindow}" : "~\n";
    }
    1;
 }
@@ -359,10 +386,8 @@ sub prPage
    %sidPattern    = ();
    %sidShading    = ();
    %sidColorSpace = ();
-   $xPos          = 0;
-   $yPos          = 0;
-   $xScale        = 1;
-   $yScale        = 1;
+   @annots        = ();
+   
    undef $interAktivSida;
    undef $checkCs;
    if (($runfil) && (! $noLogg))
@@ -378,41 +403,94 @@ sub prPage
 }
 
 sub prText
-{ my $xPos = shift;
-  my $yPos = shift;
-  my $TxT  = shift;
+{ my $xFrom = shift;
+  my $y     = shift;
+  my $TxT   = shift;
+  my $how   = shift || '';
 
+  my ($xTo, $rotate); 
   if (! defined $TxT)
   {  $TxT = '';
   } 
 
-  if (($xPos !~ m'[\d\.]+'o) || (! defined $xPos))
-  { errLog("Illegal x-position for text: $xPos");
+  if (($xFrom !~ m'[\d\.]+'o) || (! defined $xFrom))
+  { errLog("Illegal x-position for text: $xFrom");
   } 
-  if (($yPos !~ m'[\d\.]+'o) || (! defined $yPos))
-  { errLog("Illegal y-position for text: $yPos");
+  if (($y !~ m'[\d\.]+'o) || (! defined $y))
+  { errLog("Illegal y-position for text: $y");
   }
 
   if ($runfil)
   {   my $Texten   = prep($TxT);
-      $log .= "Text~$xPos~$yPos~$Texten\n";
+      $log .= "Text~$xFrom~$y~$Texten~$how\n";
   } 
-
-  $TxT =~ s|\(|\\(|gos;
-  $TxT =~ s|\)|\\)|gos;
 
   if (! $aktuellFont[foINTNAMN])
   {  findFont();
   }
   my $Font        = $aktuellFont[foINTNAMN];        # Namn i strömmen
   $sidFont{$Font} = $aktuellFont[foREFOBJ];
+  
+  if ($how)
+  {  $how = lc($how);
+     if ($how eq 'right')
+     {  $xTo    = $xFrom;
+        $xFrom -= prStrWidth($TxT, $aktuellFont[foEXTNAMN], $fontSize);
+     }
+     elsif ($how eq 'center')
+     {  my $width  = prStrWidth($TxT, $aktuellFont[foEXTNAMN], $fontSize);
+        $xTo = $xFrom + ($width / 2);
+        $xFrom =  $xTo - $width;    
+     }
+     elsif (($how ne 'left') && ($how =~ m'\d'o))
+     {  $rotate = $how;
+     }
+     elsif (wantarray)
+     {  $xTo = $xFrom + prStrWidth($TxT, $Font, $fontSize);
+     }
+  }
+  elsif (wantarray)
+  {  $xTo = $xFrom + prStrWidth($TxT, $Font, $fontSize);
+  }
 
-  $stream .= "\nBT /$Font $fontSize Tf ";
-  $stream .= "$xPos $yPos Td \($TxT\) Tj ET\n";
+  $TxT =~ s|\(|\\(|gos;
+  $TxT =~ s|\)|\\)|gos;
+
+  unless ($rotate) 
+  {   $stream .= "\nBT /$Font $fontSize Tf ";
+      $stream .= "$xFrom $y Td \($TxT\) Tj ET\n";
+  }
+  else
+  {   if ($rotate =~ m'q(\d)'oi)
+      {  if ($1 eq '1')
+         {  $rotate = 270;
+         }
+         elsif ($1 eq '2')
+         {  $rotate = 180;
+         }
+         else
+         {  $rotate = 90;
+         }
+      }
+      my $radian = sprintf("%.6f", $rotate / 57.2957795);    # approx. 
+      my $Cos    = sprintf("%.6f", cos($radian));
+      my $Sin    = sprintf("%.6f", sin($radian));
+      my $negSin = $Sin * -1;
+      $stream .= "BT /$Font $fontSize Tf\n"
+               . "$Cos $Sin $negSin $Cos $xFrom $y Tm\n"
+               . "($TxT) Tj ET\n";   
+  }
+
   if (! $pos)
   {  errLog("No output file, you have to call prFile first");
   }
-  1;  
+
+  if (wantarray)
+  {   return ($xFrom, $xTo);
+  }      
+  else
+  {   return 1;
+  }  
 }
 
 
@@ -704,12 +782,8 @@ sub skrivSida
 
    if ($interAktivSida)
    {  my ($infil, $sidnr) = split(/\s+/, $interActive);
-      AcroFormsEtc($infil, $sidnr);
-      $NamesSaved     = $Names;
-      $AARootSaved    = $AARoot;
-      $AnnotsSaved    = $Annots; 
-      $AAPageSaved    = $AAPage; 
-      $AcroFormSaved  = $AcroForm;
+      ($NamesSaved, $AARootSaved, $AAPageSaved, $AcroFormSaved) 
+            = AcroFormsEtc($infil, $sidnr);     
    }
 
    ##########################
@@ -860,9 +934,11 @@ sub skrivSida
     
     $stream = '';
 
-     if (defined $AnnotsSaved)
-    {  $sidObjekt .= "/Annots $AnnotsSaved";
-       undef $AnnotsSaved;
+    my $tSida = $sida + 1;
+    if ((@annots) 
+    || (defined @{$links{'-1'}}) 
+    || (defined @{$links{$tSida}}))
+    {  $sidObjekt .= "/Annots " . mergeLinks() . ' 0 R';
     }
     if (defined $AAPageSaved)
     {  $sidObjekt .= "/AA $AAPageSaved";
@@ -872,6 +948,7 @@ sub skrivSida
     $objekt[$sidObjNr] = $pos;
     $pos += syswrite UTFIL, $sidObjekt;
     push @{$kids[0]}, $sidObjNr;
+    $sida++;
     $counts[0]++;
     if ($counts[0] > 9)
     {  ordnaNoder(8); }
@@ -899,8 +976,7 @@ sub prEnd
     {  $utrad .= "\/Names $NamesSaved 0 R\n"; 
     }
     elsif ((scalar %fields) || (scalar @jsfiler))
-    {  $Names = behandlaNames();
-       $utrad .= "\/Names $Names 0 R\n";
+    {  $utrad .= "\/Names behandlaNames() 0 R\n";
     }
     if (defined $AARootSaved)
     {  $utrad .= "/AA $AARootSaved\n";
@@ -917,6 +993,30 @@ sub prEnd
     if (scalar @bookmarks)
     {  my $outLine = ordnaBookmarks();
        $utrad .= "/Outlines $outLine 0 R\n";
+    }
+    if (scalar %prefs)
+    {   $utrad .= '/ViewerPreferences << ';
+        if (exists $prefs{hidetoolbar})
+        {  $utrad .= ($prefs{hidetoolbar}) ? '/HideToolbar true' 
+                                           : '/HideToolbar false'; 
+        }
+        if (exists $prefs{hidemenubar}) 
+        {  $utrad .= ($prefs{hidemenubar}) ? '/HideMenubar true'
+                                           : '/HideMenubar false';
+        }
+        if (exists $prefs{hidewindowui})
+        {  $utrad .= ($prefs{hidewindowui}) ? '/HideWindowUI true' 
+                                            : '/HideWindowUI false';
+        }
+        if (exists $prefs{fitwindow})
+        {  $utrad .= ($prefs{fitwindow}) ? '/FitWindow true'
+                                         : '/FitWindow false';
+        }
+        if (exists $prefs{centerwindow})
+        {  $utrad .= ($prefs{centerwindow}) ? '/CenterWindow true'
+                                            : '/CenterWindow false';
+        }
+        $utrad .= '>> ';
     }
  
     $utrad .= ">>\nendobj\n";
@@ -1026,7 +1126,7 @@ sub skrivUtNoder
             }
          }
       
-         $nodObjekt = "$parents[$i] 0 obj\n<</Type/Pages/Parent $nod 0 R\n/Kids $vektor\n/Count $counts[$i]\n>>\nendobj\n";
+         $nodObjekt = "$parents[$i] 0 obj\n<</Type/Pages/Parent $nod 0 R\n/Kids $vektor\n/Count $counts[$i]>>\nendobj\n";
       
          $objekt[$parents[$i]] = $pos;
          $pos += syswrite UTFIL, $nodObjekt;
@@ -1040,7 +1140,7 @@ sub skrivUtNoder
    {  $vektor .= "$_ 0 R "; }
    $vektor .= ']';
    $nodObjekt  = "$slutNod 0 obj\n<</Type/Pages\n/Kids $vektor\n/Count $counts[$si]";
-   #$nodObjekt .= "/MediaBox \[$genLowerX $genLowerY $genUpperX $genUpperY\]";
+   $nodObjekt .= "/MediaBox \[$genLowerX $genLowerY $genUpperX $genUpperY\]";
    $nodObjekt .= " >>\nendobj\n";
    $objekt[$slutNod] = $pos;
    $pos += syswrite UTFIL, $nodObjekt;
@@ -1196,15 +1296,29 @@ The module doesn't make any attempt to import anything from encrypted files.
 =head1 Mandatory Functions
 
 =head2 prFile		- define output
- 
-   prFile ( $fileName )
 
-$fileName is optional.
+Alternative 1:
+
+   prFile ( $fileName );
+
+Alternative 2 with parameters in an anonymous hash:
+
+   prFile ( { Name         => $fileName,
+              HideToolbar  => 1,            # 1 | 0
+              HideMenubar  => 1,            # 1 | 0
+              HideWindowUI => 1,            # 1 | 0
+              FitWindow    => 1,            # 1 | 0
+              CenterWindow => 1   } );      # 1 | 0
+
+$fileName is optional, just like the rest of the parameters.
 File to create. If another file is current when this function is called, the first
 one is written and closed. Only one file is processed at a single moment. If
-$fileName is undefined, output is written to STDOUT.
+$fileName is undefined, output is written to STDOUT. 
 
-Look at any program in this documentation for an example. prInitVars() shows how
+HideToolbar, HideMenubar, HideWindowUI, FitWindow and CenterWindow control the
+way the document is initially displayed. 
+
+Look at any program in this documentation for examples. prInitVars() shows how
 this function could be used together with a web server.
 
 =head2 prEnd		- end/flush buffers 
@@ -1422,7 +1536,7 @@ Alternative 2) You put your parameters in this order
 Anyway the function returns in list context:  B<$intName, @BoundingBox, 
 $numberOfImages>, in scalar context:  B<$internalName> of the form.
 
-Look at prForm() for an explaination of the parameters.
+Look at prForm() for an explanation of the parameters.
 
 N.B. Usually you shouldn't adjust or change size and proportions of an interactive
 page. The graphic and interactive components are independent of each other and there 
@@ -1483,12 +1597,6 @@ If you are going to assign a value to a field consisting of several lines, you
 can write like this:
 
    my $string = "This is the first line \r second line \n 3:rd line";
-   prField('fieldName', $string);
-
-If you have single-quotes it is more complicated. You need 3 backslashes 
-to preserve the special characters.
-
-   my $string = 'This is the first line \\\r second line \\\n 3:rd line';
    prField('fieldName', $string);
 
 You can also let '$value' be a  snippet of JavaScript-code that assigns something
@@ -1807,8 +1915,7 @@ For all other parameters, look at prForm().
    use PDF::Reuse;
    use strict;
 
-   prFile('myFile.pdf');
-   
+   prFile('myFile.pdf'); 
    my @vec = prImage({ file  => 'best.pdf',
                        x     => 10,
                        y     => 400,
@@ -1816,7 +1923,6 @@ For all other parameters, look at prForm().
                        ysize => 0.8 } );
    prText(35, 760, 'This is some text');
    # ...
-
    prPage();
    my @vec2 = prImage( { file    => 'destiny.pdf',
                          page    => 1,
@@ -1839,7 +1945,6 @@ For all other parameters, look at prForm().
    else
    {  $xScale = $yScale;
    }
-      
    prImage({ file   => 'best.pdf',
              x      => 25,
              y      => 450,
@@ -1856,13 +1961,12 @@ For all other parameters, look at prForm().
    else
    {  $xScale = $yScale;
    }
-   
    prImage({ file   => 'destiny.pdf',
              x      => 25,
              y      => 25,
              xsize  => $xScale,
              ysize  => $yScale} );
-   
+
    prEnd();
 
 On the first page an image is displayed in a simple way. While the second page
@@ -1908,7 +2012,7 @@ program grows.
    use PDF::Reuse;
    use strict;
    prInitVars();     # To initiate ALL global variables and tables
-   # prInitVars(1);  # To make it faster, but mor memory consuming
+   # prInitVars(1);  # To make it faster, but more memory consuming
 
    $| = 1;
    print STDOUT "Content-Type: application/pdf \n\n";
@@ -1974,6 +2078,63 @@ In that case the file has to consist only of JavaScript functions.
 
 B<See "Remarks about Javascript">
 
+=head2 prLink    - add a hyperlink
+
+   prLink( { page   => $pageNo,     # Starting with 1  !
+             x      => $x,
+             y      => $y,
+             width  => $width,
+             height => $height,
+             URI    => $URI     } );
+
+You can also call prLink like this:
+
+   prLink($page, $x, $y, $width, $height, $URI);
+
+You have to put prLink B<after prFile and before the sentences where its' page
+is created>. The links are created at the page-breaks. If the page is already 
+created, no new link will be inserted. 
+
+Here is an example where the links of a 4 page document are preserved, and a link is
+added at the end of the document. We assume that there is some suitable text at that
+place (x = 400, y = 350):
+
+   use strict;
+   use PDF::Reuse;
+
+   prFile('test.pdf');
+
+   prLink( {page   => 4,
+            x      => 400,
+            y      => 350,
+            width  => 105,
+            height => 15,
+            URI    => 'http://www.purelyInvented.com/info.html' } );
+
+   prDoc('fourPages.pdf');
+
+   prEnd();
+
+( If you are creating each page of a document separately, you can also use 'hyperLink'
+from PDF::Reuse::Util. Then you get an external text in Helvetica-Oblique, underlined
+and in blue.
+
+  use strict;
+  use PDF::Reuse;
+  use PDF::Reuse::Util;
+
+  prFile('test.pdf');
+  prForm('template.pdf', 5);
+  my ($from, $pos) = prText(25, 700, 'To get more information  ');
+
+  $pos = hyperLink( $pos, 700, 'Press this link',
+                    'http://www.purelyInvented.com/info.html' );
+  ($from, $pos) = prText( $pos, 700, ' And get connected');
+  prEnd();
+
+'hyperLink' has a few parameters: $x, $y, $textToBeShown, $hyperLink and
+$fontSize (not shown in the example). It returns current x-position. )
+
 =head2 prLog		- add a string to the log 
 
    prLog ( $string )
@@ -2026,17 +2187,77 @@ See prForm() for an example.
 Don't use the optional parameter, it is only used internally, not to clutter the log,
 when automatic page breaks are made.
 
-See prForm() for an example. 
+See prForm() for an example.
+
+=head2 prStrWidth   - calculate the string width
+
+   prStrWidth($string, $font, $fontSize)
+
+Returns string width in pixels.
+Should be used in conjunction with one of these predefined fonts of Acrobat/Reader:
+Times-Roman, Times-Bold, Times-Italic, Times-BoldItalic, Courier, Courier-Bold, Courier-Oblique,
+Courier-BoldOblique, Helvetica, Helvetica-Bold, Helvetica-Oblique,
+Helvetica-BoldOblique. If some other font is given, Helvetica is used, and the
+returned value will at the best be approximate.
 
 =head2 prText		- add a text-string 
 
-   prText ( $x, $y, $string )
+   prText ( $x, $y, $string, $how )
 
 Puts B<$string> at position B<$x, $y>
-Current font and font size is used. (If you use prAdd() before this function,
+Returns 1 in scalar context. Returns ($xFrom, $xTo) in list context. $xTo will not
+be defined if $how is a rotation. prStrWidth() is used to calculate the length of the
+strings, so only the predefined fonts together with Acrobat/Reader will give
+reliable values for $xTo.      
+
+$how can be 'left' (= default), 'center', 'right', a degree 0 - 360, 'q1', 'q2' 
+or 'q3'. The parameter is optional.
+
+Current font and font size are used. (If you use prAdd() before this function,
 many other things could also influence the text.)
 
-See prImage() for an example.  
+   use strict;
+   use PDF::Reuse;
+
+   prFile('test.pdf');
+
+   #####################################
+   # Use a "curser" ($pos) along a line
+   #####################################
+
+   my ($from, $pos) = prText(25, 800, 'First write this. ');
+   ($from, $pos) = prText($pos, 800, 'Then write this. '); 
+   prText($pos, 800, 'Finally write this.');
+
+   #####################################
+   # Right adjust and center sentences
+   #####################################
+
+   prText( 200, 750, 'A short sentence', 'right');
+   prText( 200, 735, 'This is a longer sentence', 'right');
+   prText( 200, 720, 'A word', 'right');
+
+   prText( 200, 705, 'Centered around a point 200 pixels from the left', 'center');
+   prText( 200, 690, 'The same center', 'center');
+   prText( 200, 675, '->.<-', 'center');
+
+   ############
+   # Rotation
+   ############
+
+   prText( 200, 550, ' Rotate 0 degrees', 0);
+   prText( 200, 550, ' Rotate 60 degrees', 60);
+   prText( 200, 550, ' Rotate 120 degrees', 120);
+   prText( 200, 550, ' Rotate 180 degrees', 180);
+   prText( 200, 550, ' Rotate 240 degrees', 240);
+   prText( 200, 550, ' Rotate 300 degrees', 300);
+
+   prText( 400, 430, 'Rotate 90 degrees clock-wise', 'q1');
+   prText( 400, 430, 'Rotate 180 degrees clock-wise', 'q2');
+   prText( 400, 430, 'Rotate 270 degrees clock-wise', 'q3');
+
+   prEnd();
+
 
 =head2 prTouchUp		- make changes and reuse more difficult 
 
@@ -2222,9 +2443,14 @@ legal problems would be possible to handle.)
 At the present time PDF cannot compete with HTML, but if you used the log files
 and a simple cash, PDF would be just superior for repeated tasks.
 
+=head1 THANKS TO
+
+Martin Langhoff and others who have contributed with code, suggestions and error
+reports.
+
 =head1 AUTHOR
 
-Lars Lundberg elkelund@worldonline.se
+Lars Lundberg elkelund @ worldonline . se
 
 =head1 COPYRIGHT
 
@@ -2240,6 +2466,109 @@ you do at your own risk - I will not take responsibility
 for any damage, loss of money and/or health that may arise from the use of this module.
 
 =cut
+
+sub prLink
+{ my %link;
+  my $param = shift;
+  if (ref($param) eq 'HASH')
+  {  $link{page}   = $param->{'page'} || -1;
+     $link{x}      = $param->{'x'}    || 100;
+     $link{y}      = $param->{'y'}    || 100;
+     $link{width}  = $param->{width}  || 75;
+     $link{height} = $param->{height} || 15;
+     $link{URI}    = $param->{URI};
+  }
+  else
+  {  $link{page}   = $param || -1;
+     $link{x}      = shift || 100;
+     $link{y}      = shift || 100;
+     $link{width}  = shift || 75;
+     $link{height} = shift || 15;
+     $link{URI}    = shift;
+  }
+
+  if (! $pos)
+  {  errLog("No output file, you have to call prFile first");
+  }
+
+  if ($runfil)
+  {  $log .= "Link~$link{page}~$link{x}~$link{y}~$link{width}~" 
+          . "$link{height}~$link{URI}\n";
+  }
+  
+  if ($link{URI})
+  {  push @{$links{$link{page}}}, \%link;
+  }
+  1;
+}
+
+sub mergeLinks
+{   my $tSida = $sida + 1;
+    my $rad;
+    for my $link (@{$links{'-1'}}, @{$links{$tSida}} )
+    {   my $x2 = $link->{x} + $link->{width};
+        my $y2 = $link->{y} + $link->{height};
+        $objNr++;
+        $objekt[$objNr] = $pos;
+        $rad = "$objNr 0 obj\n<<\n" .
+        "/Type /Annot /Subtype /Link\n" .
+        "/Rect [ $link->{x} $link->{y} $x2 $y2 ]\n" .
+        "/A <</S /URI\n/URI ($link->{URI})>>\n" .
+        "/Border [0 0 0]/H /I>>\nendobj\n";
+        $pos += syswrite UTFIL, $rad;
+        push @annots, $objNr;
+    }
+    @{$links{'-1'}}   = ();
+    @{$links{$tSida}} = ();
+    $objNr++;
+    $objekt[$objNr] = $pos;
+    $rad = "$objNr 0 obj\n[\n";
+    for (@annots)
+    {  $rad .= "$_ 0 R\n";
+    }
+    $rad .= "]\nendobj\n";
+    $pos += syswrite UTFIL, $rad;
+    @annots = ();
+    return $objNr;
+}
+
+sub prStrWidth 
+{  require PDF::Reuse::Util;
+   my $string   = shift;
+   my $Font     = shift;
+   my $FontSize = shift || $fontSize;
+   my $w = 0;
+    
+  if (! $Font)
+  {   if (! $aktuellFont[foEXTNAMN])
+      {  findFont();
+      }
+      $Font = $aktuellFont[foEXTNAMN];
+  }
+
+  if (! exists $PDF::Reuse::Util::font_widths{$Font})
+  {  if (exists $stdFont{$Font})
+     {  $Font = $stdFont{$Font};
+     }
+     if (! exists $PDF::Reuse::Util::font_widths{$Font})
+     {   $Font = 'Helvetica';
+     }
+  }
+  
+  if (ref($PDF::Reuse::Util::font_widths{$Font}) eq 'ARRAY')
+  {   my @font_table = @{ $PDF::Reuse::Util::font_widths{$Font} };
+      for my $c (split '', $string) 
+      {  $w += $font_table[ord $c];	
+      }
+  }
+  else
+  {   $w = length($string) * $PDF::Reuse::Util::font_widths{$Font};
+  }
+  $w = $w / 1000 * $FontSize;
+  
+  return $w;
+}
+
 
 sub prBookmark
 {   my $param = shift;
@@ -2417,15 +2746,14 @@ sub prInitVars
     $genUpperY    = 842;
     $fontSize     = 12;
     ($utfil, $slutNod, $formCont, $imSeq, 
-    $page, $Annots, $Names, $AARoot, $AAPage, $sidObjNr,  
-    $AcroForm, $interActive, $NamesSaved, $AARootSaved, $AAPageSaved, $root,
-    $AcroFormSaved, $AnnotsSaved, $id, $ldir, $checkId, $formNr, $imageNr, 
+    $page, $sidObjNr, $interActive, $NamesSaved, $AARootSaved, $AAPageSaved,
+    $root, $AcroFormSaved, $id, $ldir, $checkId, $formNr, $imageNr, 
     $filnamn, $interAktivSida, $taInterAkt, $type, $runfil, $checkCs,
-    $confuseObj, $compress,$pos, $fontNr, $objNr, $xPos, $yPos,
+    $confuseObj, $compress,$pos, $fontNr, $objNr,
     $defGState, $gSNr, $pattern, $shading, $colorSpace) = '';
 
     (@kids, @counts, @formBox, @objekt, @parents, @aktuellFont, @skapa,
-     @jsfiler, @inits, @bookmarks) = ();
+     @jsfiler, @inits, @bookmarks, @annots) = ();
 
     ( %resurser,  %objRef, %nyaFunk,%oldObject, %unZipped, 
       %sidFont, %sidXObject, %sidExtGState, %font, %fields, %script,
@@ -2456,30 +2784,30 @@ sub prImage
       $ysize, $rotate);
 
   if (ref($param) eq 'HASH')
-  {  $infil    = $param->{'file'};
-     $sidnr    = $param->{'page'} || 1;
-     $bildnr   = $param->{'imageNo'} || 1;
-     $effect   = $param->{'effect'} || 'print';
-     $adjust   = $param->{'adjust'} || '';
-     $x        = $param->{'x'} || 0;
-     $y        = $param->{'y'} || 0;
-     $rotate   = $param->{'rotate'} || 0;
-     $size     = $param->{'size'} || 1;
-     $xsize    = $param->{'xsize'} || 1;
-     $ysize    = $param->{'ysize'} || 1;
+  {  $infil  = $param->{'file'};
+     $sidnr  = $param->{'page'} || 1;
+     $bildnr = $param->{'imageNo'} || 1;
+     $effect = $param->{'effect'} || 'print';
+     $adjust = $param->{'adjust'} || '';
+     $x      = $param->{'x'} || 0;
+     $y      = $param->{'y'} || 0;
+     $rotate = $param->{'rotate'} || 0;
+     $size   = $param->{'size'} || 1;
+     $xsize  = $param->{'xsize'} || 1;
+     $ysize  = $param->{'ysize'} || 1;
   }
   else
-  {  $infil   = $param;
-     $sidnr   = shift || 1;
-     $bildnr  = shift || 1;
-     $effect  = shift || 'print';
-     $adjust   = shift || '';
-     $x        = shift || 0;
-     $y        = shift || 0;
-     $rotate   = shift || 0;
-     $size     = shift || 1;
-     $xsize    = shift || 1;
-     $ysize    = shift || 1;
+  {  $infil  = $param;
+     $sidnr  = shift || 1;
+     $bildnr = shift || 1;
+     $effect = shift || 'print';
+     $adjust = shift || '';
+     $x      = shift || 0;
+     $y      = shift || 0;
+     $rotate = shift || 0;
+     $size   = shift || 1;
+     $xsize  = shift || 1;
+     $ysize  = shift || 1;
   }
 
   my ($refNr, $inamn, $bildIndex, $xc, $yc, $xs, $ys);
@@ -2492,10 +2820,10 @@ sub prImage
   {  $imageNr++;
      $inamn = 'Im' . $imageNr;
      $knownToFile{'Im:' . $iSource} = $inamn;
-     $image{$iSource}[imXPOS]   = $xPos;
-     $image{$iSource}[imYPOS]   = $yPos;
-     $image{$iSource}[imXSCALE] = $xScale;
-     $image{$iSource}[imYSCALE] = $yScale;
+     $image{$iSource}[imXPOS]   = 0;
+     $image{$iSource}[imYPOS]   = 0;
+     $image{$iSource}[imXSCALE] = 1;
+     $image{$iSource}[imYSCALE] = 1;
      if (! exists $form{$fSource} )
      {  $refNr = getPage($infil, $sidnr, '');
         if ($refNr)
@@ -2541,12 +2869,10 @@ sub prImage
      {  $stream .= fillTheForm(0, 0, $iData[imWIDTH], $iData[imHEIGHT],$adjust);        
      }
      else
-     {   my $tXsize = ($xScale * $xsize);
-         my $tYsize = ($yScale * $ysize);
-         my $tX     = ($x + $xPos + $iData[imXPOS]);
-         my $tY     = ($y + $yPos + $iData[imYPOS]);
+     {   my $tX     = ($x + $iData[imXPOS]);
+         my $tY     = ($y + $iData[imYPOS]);
          $stream .= calcMatrix($tX, $tY, $rotate, $size, 
-                               $tXsize, $tYsize, $iData[imWIDTH], $iData[imHEIGHT]);
+                               $xsize, $ysize, $iData[imWIDTH], $iData[imHEIGHT]);
      }
      $stream .= "$iData[imWIDTH] 0 0 $iData[imHEIGHT] 0 0 cm\n";
      $stream .= "/$inamn Do\n";
@@ -2648,38 +2974,6 @@ sub prBar
   
 }
 
-#####################################
-# Definiera positionerna för en bild
-#####################################
-
-sub prMoveTo
-{   $xPos = shift || 0;
-    $yPos = shift || 0;
-    if ($runfil)
-    {  $log .= "MoveTo~$xPos~$yPos\n";
-    }
-    if (! $pos)
-    {  errLog("No output file, you have to call prFile first");
-    }
-    1;
-
-}
-
-######################################
-# Definiera skalan för en bild
-###################################### 
-
-sub prScale
-{  $xScale = shift || 1;
-   $yScale = shift || 1;
-   if ($runfil)
-   {  $log = "Scale~$xScale~$yScale\n";
-   }
-  if (! $pos)
-  {  errLog("No output file, you have to call prFile first");
-  }
-  1;
-}
 
 sub prExtract
 {  my $name = shift;
@@ -2738,7 +3032,7 @@ sub prDoc
   { $objNr--;
   }
   
-  my $sidor = analysera($infil, $first, $last);
+  my ($sidor, $Names, $AARoot, $AcroForm) = analysera($infil, $first, $last);
   if (($Names) || ($AARoot) || ($AcroForm))
   { $NamesSaved     = $Names;
     $AARootSaved    = $AARoot;
@@ -3754,17 +4048,15 @@ sub getPage
 
    my ($res, $i, $referens,$objNrSaved,$validStream, $formRes, @objData, 
        @underObjekt, @sidObj, $strPos, $startSida, $sidor, $filId, $del1, $del2,
-       $offs, $siz, $embedded, $vektor, $utrad, $robj, $valid);
+       $offs, $siz, $embedded, $vektor, $utrad, $robj, $valid, $Annots, $Names,
+       $AcroForm, $AARoot, $AAPage);
+
    my $sidAcc = 0;
    my $seq    = 0;
    $imSeq     = 0;
    @skapa     = ();   
    undef $formCont;
-   undef $AcroForm;
-   undef $Annots;
-   undef $Names;
-   undef $AARoot; 
-   undef $AAPage;
+   
    
    $objNrSaved = $objNr;   
    my $fSource = $infil . '_' . $sidnr;
@@ -4157,7 +4449,18 @@ sub getPage
            $AAPage =~ s/\b(\d+)\s{1,2}\d+\s{1,2}R\b/xform() . ' 0 R'/oegs;
        }
        if (defined $Annots)
-       {   @$$ref[iANNOTS] = $Annots;
+       {   my @array;
+           if ($Annots =~ m'\[([^\[\]]*)\]'os)
+           {  $Annots = $1;
+              @array = ($Annots =~ m'\b(\d+)\s{1,2}\d+\s{1,2}R\b'ogs);  
+           }
+           else
+           {  if ($Annots =~ m'\b(\d+)\s{1,2}\d+\s{1,2}R\b'os)
+              {  $Annots = getObject($1);
+                 @array = ($Annots =~ m'\b(\d+)\s{1,2}\d+\s{1,2}R\b'ogs);
+              }
+           }             
+           @$$ref[iANNOTS] = \@array;
            $Annots =~ s/\b(\d+)\s{1,2}\d+\s{1,2}R\b/xform() . ' 0 R'/oegs;
        }
       
@@ -4522,11 +4825,7 @@ sub getImage
 sub AcroFormsEtc
 {  my ($infil, $sidnr) =  @_;
    
-   undef $Names;
-   undef $AARoot;
-   undef $Annots; 
-   undef $AAPage; 
-   undef $AcroForm;
+   my ($Names, $AARoot, $AAPage, $AcroForm);
    @skapa = ();
    
    my ($res, $corr, $nyDel1, @objData, $del1, $del2, $utrad);
@@ -4577,8 +4876,9 @@ sub AcroFormsEtc
        $AAPage =~ s/\b(\d+)\s{1,2}\d+\s{1,2}R\b/xform() . ' 0 R'/oegs;
    }
    if (defined $intAct{$fSource}[iANNOTS])
-   {   $Annots = $intAct{$fSource}[iANNOTS];
-       $Annots =~ s/\b(\d+)\s{1,2}\d+\s{1,2}R\b/xform() . ' 0 R'/oegs;
+   {  for (@{$intAct{$fSource}[iANNOTS]})
+      {  push @annots, quickxform($_);
+      }
    }
 
    ##################################
@@ -4618,7 +4918,7 @@ sub AcroFormsEtc
    }
     
    close INFIL;
-   1;
+   return ($Names, $AARoot, $AAPage, $AcroForm);
 } 
 
 ##############################
@@ -4999,11 +5299,7 @@ sub analysera
    $root      = (exists $processed{$infil}->{root}) 
                     ? $processed{$infil}->{root} : 0;
              
-   undef $AcroForm;
-   undef $Annots;
-   undef $Names;
-   undef $AARoot; 
-   undef $AAPage;
+   my ($AcroForm, $Annots, $Names, $AARoot);
    undef $taInterAkt;
    undef %script;
    
@@ -5114,6 +5410,7 @@ sub analysera
                  {  if ($sidAcc <= $to)
                     {  sidAnalys($j, $objektet, $resources);
                        $extraherade++;
+                       $sida++;
                     }
                     else
                     {  $sidAcc = $sidor;
@@ -5122,6 +5419,7 @@ sub analysera
                  else
                  {  sidAnalys($j, $objektet, $resources);
                     $extraherade++;
+                    $sida++;
                  }
               }
           }
@@ -5172,12 +5470,12 @@ sub analysera
   close INFIL;
   $processed{$infil}->{root}         = $root;
 
-  return $extraherade;
+  return ($extraherade, $Names, $AARoot, $AcroForm);
 }
 
 sub sidAnalys
 {  my ($oNr, $obj, $resources) = @_;
-   my ($ny, $strPos, $spar, $closeProc, $del1, $del2, $utrad);
+   my ($ny, $strPos, $spar, $closeProc, $del1, $del2, $utrad, $Annots);
 
    if (! $parents[0])
    { $objNr++;
@@ -5201,15 +5499,39 @@ sub sidAnalys
    elsif ($obj =~ m'^\d+ \d+ obj\s*<<(.+)>>\s*endobj'os)
    {  $del1 = $1;
    }
+   if (%links)
+   {   my $tSida = $sida + 1;
+       if (defined (@{$links{'-1'}}) || (defined @{$links{$tSida}}))
+       {   if ($del1 =~ m'/Annots\s*([^\/\<\>]+)'os)
+           {  $Annots  = $1;
+              @annots = (); 
+              if ($Annots =~ m'\[([^\[\]]*)\]'os)
+              {  ; }
+              else
+              {  if ($Annots =~ m'\b(\d+)\s{1,2}\d+\s{1,2}R\b'os)
+                 {  $Annots = getObject($1);
+                 }
+              }
+              while ($Annots =~ m'\b(\d+)\s{1,2}\d+\s{1,2}R\b'ogs)
+              {   push @annots, xform();
+              }
+              $del1 =~ s?/Annots\s*([^\/\<\>]+)??os;
+           }
+           $Annots = '/Annots ' . mergeLinks() . ' 0 R';
+       }
+   }
+
    if (! $taInterAkt)
-   {  $del1 =~ s?\s*/Annots\s+\d+\s{1,2}\d+\s{1,2}R??os;
-      $del1 =~ s?\s*/AA\s*<<[^>]*>>??os;
+   {  $del1 =~ s?\s*/AA\s*<<[^>]*>>??os;
    }
    if ($del1 !~ m'/Resources'o)
    {  $del1 .= "/Resources $resources";
    }
        
    $del1 =~ s/\b(\d+)\s{1,2}\d+\s{1,2}R\b/xform() . ' 0 R'/oegs;
+   if ($Annots)
+   {  $del1 .= $Annots;
+   }
 
    $utrad = "$ny 0 obj\n<<$del1\n" . '>>';
    if (defined $del2)
@@ -5543,11 +5865,10 @@ sub defLadda
           $code .= "if (this.getField('$_')) this.getField('$_').value = $val;\r";
       }
       else
-      {  $val =~ s/\'/\\\\\'/gos;
-         $val =~ s/\r/\\\\r/gos;
-         $val =~ s/\n/\\\\n/gos;
-         $code .= "if (this.getField('$_')) this.getField('$_').value = '$val';\r";
+      {  $val =~ s/([^A-Za-z0-9\-_.!* ])/sprintf("%%%02X", ord($1))/ge;
+         $code .= "if (this.getField('$_')) this.getField('$_').value = unescape('$val');\r";
       }
+
    }  
    $code .= " 1;}\r";
    

@@ -4,5 +4,6 @@ MANIFEST
 README
 Reuse.pm
 test.pl
-util/reuseComponent_pl
-util/graphObj_pl
+Util/reuseComponent_pl
+Util/graphObj_pl
+Reuse/Util.pm

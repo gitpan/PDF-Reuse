@@ -1,5 +1,17 @@
 Revision history for Perl extension PDF::Reuse.
 
+0.25 Sat Apr 10 2004
+     -"prLink" added, to add and merge hyperlinks into a document
+     -prStrWidth added. You get string width calculated for some predefined fonts.
+     -A new parameter to prText added, so you can center, right adjust and rotate
+     texts.
+     If the text is not rotated you can get from- and to- positions of text strings
+     -New parameters to prFile to control how a document is initially displayed
+     -MediaBox is defined at the top of the page tree also. 
+     -Special characters in values to prField are hex-encoded when they are
+     transferred to the new document, and unescaped from within JavaScript.
+     So special characters might be handled in a new way ! 
+
 0.24 Tue Mar 9 2004
      Corrected a warning about when JavaScripts can be added to a document
 

@@ -1,4 +1,4 @@
-PDF/Reuse version 0.24
+PDF/Reuse version 0.25
 ======================
 
 This module gives you a possibility to reuse PDF-files. You can use pages,
@@ -7,7 +7,7 @@ were not encrypted), and rearrange the components, and add new graphics,
 texts etc.
 
 There is also support for graphics. In the tutorial there is a description of
-how to transform a simple PDF-pages to graphic perl objects with the help of
+how to transform a simple PDF-pages to graphic Perl objects with the help of
 programs based on this module.
 
 The module is fairly fast, so it should be possible to used it for mass
@@ -66,7 +66,7 @@ Under other operating systems try the following:
 
 
 N.B.
-In the examples directory there is a zipfile with PDF documents and generated
+In the examples directory there is a zip file with PDF documents and generated
 modules. Unzip it. I had to put all these files like that, to hide them from
 the normal processing around the upload to CPAN.   
 
