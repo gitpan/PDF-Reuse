@@ -1,9 +1,8 @@
-use PDF;
 use PDF::Reuse;
 use strict;
 
 my %stdFont = 
-       ( 'Times-Roman'           => 'Times-Roman',
+       ( 'Times-Roman'          => 'Times-Roman',
         'Times-Bold'            => 'Times-Bold',
         'Times-Italic'          => 'Times-Italic',
         'Times-BoldItalic'      => 'Times-BoldItalic',
@@ -37,33 +36,24 @@ my ($line, $string);
 my $x = 25;
 my $y = 710;
 
-my ($xDim, $yDim, $xScale, $yScale);
+my ($xDim, $yDim, $xScale, $yScale, $pdf);
 
-my $file   = shift;
-my $pageNo = shift;
+my $file = shift;
 
-my $i = $pageNo || 1;
-
-################################################################################
-# PDF always croaks about 'bad object reference >'  when the info-part of  
-# the PDF-file is missing. That doesn't hinder 'myFile.pdf' from being created
-################################################################################
-
-my $pdf   = PDF->new($file);
-my $pages = $pdf->Pages;
+my $i = 1;
 
 prFile('myFile.pdf');
 prFontSize(7);
 
-while (($pages) && ($i <= $pages))
-{  if (($pageNo) && ($i != $pageNo))
-   {  last;
-   }
-   my @vec = prForm( { file     => $file,
+while (1)
+{  my @vec = prForm( { file     => $file,
                        page     => $i,
                        effect   => 'add',
                        tolerant => 1 });
    my $form = $vec[0];
+   if ($form eq '0')
+   {  last;
+   }
    if ($form)
    {  $xDim = $vec[3] - $vec[1];
       $yDim = $vec[4] - $vec[2];                      
@@ -112,6 +102,8 @@ while (($pages) && ($i <= $pages))
        {
           $xScale = 100 / $width;
           $yScale = 100 / $height;
+          
+
           if ($xScale < $yScale)
           {  $yScale = $xScale;
           }
@@ -120,6 +112,7 @@ while (($pages) && ($i <= $pages))
           }
           $xDim = $xScale * $width;
           $yDim = $yScale * $height;
+          
        }
        $string  = "q\n";
        $string .= "$xDim 0 0 $yDim $x $y cm\n";  # scale and "move to" 

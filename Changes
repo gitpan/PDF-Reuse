@@ -1,5 +1,11 @@
 Revision history for Perl extension PDF::Reuse.
 
+0.22 Sun Jan 11 2004
+     Corrected an error introduced in version 0.15. Resources were not inherited
+     the way they should.  
+     Changes to the documentation. The examples have been moved from this
+     distribution to PDF::Reuse::Tutorial.
+
 0.21 Fri Dec 26 2003
      -prFontSize will accept sizes with decimal point. 
      -The constant IS_MODPERL has been added. It is taken from $ENV{MOD_PERL}.

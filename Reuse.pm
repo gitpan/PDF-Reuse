@@ -16,7 +16,7 @@ use autouse 'Compress::Zlib' => qw(compress($)
 use autouse 'Data::Dumper'   => qw(Dumper);
 use AutoLoader qw(AUTOLOAD);
 
-our $VERSION = '0.21';
+our $VERSION = '0.22';
 our @ISA     = qw(Exporter);
 our @EXPORT  = qw(prFile
                   prPage
@@ -486,12 +486,20 @@ sub prForm
      }
      else
      {  if ($tolerant)
-        {  undef $namn;
+        {  if ((defined $refNr) && ($refNr eq '0'))   # Sidnumret existerar inte, men ok
+           {   $namn = '0';
+           }
+           else
+           {   undef $namn;   # Sidan kan inte användas som form
+           }
         }
-        else
+        elsif (! defined $refNr)
         {  my $mess = "$fSource can't be used as a form. Try e.g. to\n"
                     . "save the file as postscript, and redistill\n";
            errLog($mess);
+        }
+        else
+        {  errLog("File : $infil  Page: $sidnr  doesn't exist");
         }
      }
   }
@@ -525,7 +533,7 @@ sub prForm
         }
      }
   }
-  my @BBox = @{$form{$fSource}[fBBOX]};
+  my @BBox = @{$form{$fSource}[fBBOX]} if ($refNr);
   if (($effect eq 'print') && ($form{$fSource}[fVALID]) && ($refNr))
   {   if (! defined $defGState)
       { prDefaultGrState();
@@ -1095,10 +1103,14 @@ PDF::Reuse - Reuse and mass produce PDF documents
 
 =head1 SYNOPSIS
 
+=for SYNOPSIS.pl begin
+
    use PDF::Reuse;                     
    prFile('myFile.pdf');                   # Mandatory function
    prText(100, 500, 'Hello World !');
    prEnd();                                # Mandatory function to flush buffers
+
+=for end
 
 =head1 DESCRIPTION
 
@@ -1156,16 +1168,15 @@ PDF::Reuse::Tutorial might show you best what you can do with this module.
 
 All functions which are successful return specified values or 1.
 
-Parameters within [] are optional
-
 The module doesn't make any attempt to import anything from encrypted files.
 
 =head1 Mandatory Functions
 
 =head2 prFile		- define output
  
-   prFile ( [$fileName] )           
+   prFile ( $fileName )
 
+$fileName is optional.
 File to create. If another file is current when this function is called, the first
 one is written and closed. Only one file is processed at a single moment. If
 $fileName is undefined, output is written to STDOUT.
@@ -1285,13 +1296,14 @@ to other documents.>
 
 =head2 prCompress		- compress/zip added streams 
 
-   prCompress ( [1] )
+   prCompress (1)
 
 '1' here is a directive to compress all B<new> streams of the current file. Streams
 which are included with prForm, prDocForm and prDoc are not changed. New 
 JavaScripts are also created as streams and compressed, if they are at least 100
 bytes long. The streams are compressed in memory, so probably there is a limit of
 how big they can be.
+
 prCompress(); is a directive not to compress. This is default.
 
 See e.g. "Starting to reuse" in the tutorial for an example.
@@ -1427,7 +1439,7 @@ Remember to save that file before closing it.)
 
 B<oldInternalName>, a "name"-object.  This is the internal name you find in the original file.
 Returns a B<$newInternalName> which can be used for "low level" programming. You
-have better look at graphObj_pl and modules it has generated for this distribution,
+have better look at graphObj_pl and modules it has generated for the tutorial,
 e.g. thermometer.pm, to see how this function can be used.  
 
 When you call this function, the necessary objects will be copied to your new
@@ -1467,9 +1479,9 @@ when the initiation is done.)
 
 =head2 prFont		- set current font 
 
-   prFont ( [$fontName] )
+   prFont ( $fontName )
 
-$fontName is an "external" font name. 
+$fontName is an "external" font name. The parameter is optional. 
 In list context returns B<$internalName, $externalName, $oldInternalName,
 $oldExternalname> The first two variables refer to the current font, the two later
 to the font before the change. In scalar context returns b<$internalName>
@@ -1492,8 +1504,7 @@ can use the font, but perhaps some of your letters were not defined.
 
 In the distribution there is an utility program, 'reuseComponent_pl', which displays
 included fonts in a PDF-file and prints some letters. Run it to see the name of the
-font and if it is worth extracting. ('reuseComponent_pl' cannot yet handle files 
-with 'cross reference objects' and 'object streams' from Acrobat 6.0)
+font and if it is worth extracting.
 
    use PDF::Reuse;
    use strict;
@@ -1518,7 +1529,7 @@ one complicated with a possibility to detail control.
 
 =head2 prFontSize		- set current font size 
 
-   prFontSize ( [$size] )
+   prFontSize ( $size )
 
 Returns B<$actualSize, $fontSizeBeforetheChange>. Without parameters
 prFontSize() sets the size to 12 pixels, which is default. 
@@ -1545,8 +1556,8 @@ Ex.:
               
 Alternative 2) You put your parameters in this order
 
-	prForm ( $pdfFile, [$page, $adjust, $effect, $tolerant, $x, $y, $degree,
-            $size, $xsize, $ysize] )
+	prForm ( $pdfFile, $page, $adjust, $effect, $tolerant, $x, $y, $degree,
+            $size, $xsize, $ysize )
 
 
 Anyway the function returns in list context:  B<$intName, @BoundingBox, 
@@ -1835,13 +1846,11 @@ is processed, prImage(), loads an image, but it is not shown here. On the 3:rd
 page, the two images are scaled and shown. 
 
 In the distribution there is an utility program, 'reuseComponent_pl', which displays
-included images in a PDF-file and their "names". (The program cannot yet handle files 
-with 'cross reference objects' and 'object streams' from Acrobat 6.0)
-
+included images in a PDF-file and their "names".
 
 =head2 prInit		- add JavaScript to be executed at initiation 
 
-   prInit ( $string[, $duplicateCode] )
+   prInit ( $string, $duplicateCode )
 
 B<$string> can be any JavaScript code, but you can only refer to functions included
 with prJs. The JavaScript interpreter will not know other functions in the document.
@@ -1862,7 +1871,7 @@ of the JavaScript might finish to early. This is a bug in Acrobat/Reader 5.
 
 =head2 prInitVars		- initiate global variables and internal tables 
 
-   prInitVars([1])
+   prInitVars(1)
 
 If you run programs with PDF::Reuse as persistent procedures, you probably need to
 initiate global variables. If you have '1' or anything as parameter, internal tables for forms, images, fonts
@@ -1872,7 +1881,8 @@ program grows.
 
    use PDF::Reuse;
    use strict;
-   prInitVars(1);
+   prInitVars();     # To initiate ALL global variables and tables
+   # prInitVars(1);  # To make it faster, but mor memory consuming
 
    $| = 1;
    print STDOUT "Content-Type: application/pdf \n\n";
@@ -1974,7 +1984,7 @@ directory 'C:\run'. If that directory doesn't exist, the system tries to create 
 
 =head2 prMbox		- define the format (MediaBox) of the current page. 
 
-   prMbox ( [$lowerLeftX, $lowerLeftY, $upperRightX, $upperRightY] )
+   prMbox ( $lowerLeftX, $lowerLeftY, $upperRightX, $upperRightY )
 
 If the function or the parameters are missing, they are set to 0, 0, 595, 842 pixels respectively.   
 
@@ -1983,7 +1993,7 @@ See prForm() for an example.
 
 =head2 prPage		- insert a page break
 
-   prPage ( [$noLog] )
+   prPage ($noLog)
 
 Don't use the optional parameter, it is only used internally, not to clutter the log,
 when automatic page breaks are made.
@@ -2002,7 +2012,7 @@ See prImage() for an example.
 
 =head2 prTouchUp		- make changes and reuse more difficult 
 
-   prTouchUp ( [1] );
+   prTouchUp (1);
 
 By default and after you have issued prTouchUp(1), you can change the document
 with the TouchUp tool from within Acrobat.
@@ -2016,7 +2026,7 @@ computer and knows how the check sums are calculated.)
 
 B<Avoid to switch off the TouchUp tool for your templates.> It creates an
 extra level within the PDF-documents . Use this function for your final documents.
- 
+
 See "Using the template" in the tutorial for an example. 
 
 (To encrypt your documents: use the batch utility within Acrobat)
@@ -2029,7 +2039,7 @@ See "Using the template" in the tutorial for an example.
 
 =item prBar		- define and paint bars for bar fonts 
 
-   prBar ([$x, $y, $string])
+   prBar ($x, $y, $string)
 
 Prints a bar font pattern at the current page.
 Returns $internalName for the font.
@@ -2095,7 +2105,7 @@ Defines positions where to put e.g. next image
 
 =item prScale 
 
-   prScale ( [$xSize, $ySize] )
+   prScale ( $xSize, $ySize )
 
 B<Deprecated> This function will be removed during 2004. You can define sizes
 with parameters directly to prImage(), prForm() and prDocForm().
@@ -2190,7 +2200,7 @@ Lars Lundberg elkelund@worldonline.se
 
 =head1 COPYRIGHT
 
-Copyright (C) 2003 Lars Lundberg, Solidez HB. All rights reserved.
+Copyright (C) 2003 - 2004 Lars Lundberg, Solidez HB. All rights reserved.
 This program is free software; you can redistribute it and/or
 modify it under the same terms as Perl itself.
 
@@ -2459,10 +2469,15 @@ sub prImage
      $image{$iSource}[imXSCALE] = $xScale;
      $image{$iSource}[imYSCALE] = $yScale;
      if (! exists $form{$fSource} )
-     {  getPage($infil, $sidnr, '');
-        $formNr++;
-        my $namn = 'Fm' . $formNr;
-        $knownToFile{$fSource} = $namn;          
+     {  $refNr = getPage($infil, $sidnr, '');
+        if ($refNr)
+        {  $formNr++;
+           my $namn = 'Fm' . $formNr;
+           $knownToFile{$fSource} = $namn;
+        }
+        elsif ($refNr eq '0')
+        {  errLog("File: $infil  Page: $sidnr can't be found");
+        }          
      }
      my $in = $form{$fSource}[fIMAGES][$bildIndex];
      $image{$iSource}[imWIDTH]  = $form{$fSource}->[fOBJ]->{$in}->[oWIDTH];
@@ -2765,12 +2780,20 @@ sub prDocForm
      }
      else
      {  if ($tolerant)
-        {  undef $namn;
+        {  if ((defined $refNr) && ($refNr eq '0'))   # Sidnumret existerar inte, men ok
+           {   $namn = '0';
+           }
+           else
+           {   undef $namn;   # Sidan kan inte användas som form
+           }
+        }
+        elsif (! defined $refNr)
+        {  my $mess = "$fSource can't be used as a form. Try e.g. to\n"
+                    . "save the file as postscript, and redistill\n";
+           errLog($mess);
         }
         else
-        {  my $mess = "$fSource can't be used as a form. Try e.g. to\n"
-                    . "concatenate the streams of the page\n";
-           errLog($mess);
+        {  errLog("File : $infil  Page: $sidnr  doesn't exist");
         }
      }
   }
@@ -2804,7 +2827,7 @@ sub prDocForm
         }
      }  
   }
-  my @BBox = @{$form{$fSource}[fBBOX]};
+  my @BBox = @{$form{$fSource}[fBBOX]} if ($refNr);
   if (($effect eq 'print') && ($form{$fSource}[fVALID]) && ($refNr))
   {   if ((! defined $interActive)
       && ($sidnr == 1)
@@ -3703,7 +3726,7 @@ sub getPage
 
    my ($res, $i, $referens,$objNrSaved,$validStream, $formRes, @objData, 
        @underObjekt, @sidObj, $strPos, $startSida, $sidor, $filId, $del1, $del2,
-       $offs, $siz, $embedded, $vektor, $utrad, $robj);
+       $offs, $siz, $embedded, $vektor, $utrad, $robj, $valid);
    my $sidAcc = 0;
    my $seq    = 0;
    $imSeq     = 0;
@@ -3798,7 +3821,10 @@ sub getPage
       if ($objektet =~ m'/Count\s+(\d+)'os)
       {  $sidor = $1;
          if ($sidnr <= $sidor)
-         {  $formRes = kolla($objektet); 
+         {  ($formRes, $valid) = kolla($objektet); 
+         }
+         else
+         {   return 0;
          }
          if ($sidor > 1)
          {   undef $AcroForm;
@@ -3832,7 +3858,7 @@ sub getPage
          {  if (($sidAcc + $1) < $sidnr)
             {  $sidAcc += $1; }
             else
-            {  $formRes = kolla($objektet, $formRes);
+            {  ($formRes, $valid) = kolla($objektet, $formRes);
                if ($objektet =~ m'/Kids\s*\[([^\]]+)'os)
                {  $vektor = $1; } 
                while ($vektor =~ m'(\d+)\s{1,2}\d+\s{1,2}R'gso)
@@ -4925,7 +4951,7 @@ sub analysera
 {  my $infil = shift;
    my $from  = shift || 1;
    my $to    = shift || 0;
-   my ($i, $res, @underObjekt, @sidObj, $vektor,
+   my ($i, $res, @underObjekt, @sidObj, $vektor, $resources, $valid,
        $strPos, $sidor, $filId, $Root, $del1, $del2, $utrad);
 
    my $extraherade = 0;
@@ -5020,6 +5046,7 @@ sub analysera
  
    if ($objektet =~ m'/Pages\s+(\d+)\s{1,2}\d+\s{1,2}R'os)
    {  $objektet = getObject($1);
+      ($resources, $valid) = kolla($objektet);
       if ($objektet =~ m'/Count\s+(\d+)'os)
       {  $sidor = $1; }   
    }
@@ -5041,7 +5068,8 @@ sub analysera
    while (($li > -1) && ($sidAcc < $sidor))
    {  if (scalar @{$levels[$li]})
       {   my $j = shift @{$levels[$li]};
-          $objektet = getObject($j); 
+          $objektet = getObject($j);
+          ($resources, $valid) = kolla($objektet, $resources); 
           if ($objektet =~ m'/Kids\s*\[([^\]]+)'os)
           {  $vektor = $1; 
              my @sObj; 
@@ -5056,7 +5084,7 @@ sub analysera
              if ($sidAcc >= $from)
              {   if ($to)
                  {  if ($sidAcc <= $to)
-                    {  sidAnalys($j, $objektet);
+                    {  sidAnalys($j, $objektet, $resources);
                        $extraherade++;
                     }
                     else
@@ -5064,7 +5092,7 @@ sub analysera
                     }
                  }
                  else
-                 {  sidAnalys($j, $objektet);
+                 {  sidAnalys($j, $objektet, $resources);
                     $extraherade++;
                  }
               }
@@ -5120,7 +5148,7 @@ sub analysera
 }
 
 sub sidAnalys
-{  my ($oNr, $obj) = @_;
+{  my ($oNr, $obj, $resources) = @_;
    my ($ny, $strPos, $spar, $closeProc, $del1, $del2, $utrad);
 
    if (! $parents[0])
@@ -5149,7 +5177,10 @@ sub sidAnalys
    {  $del1 =~ s?\s*/Annots\s+\d+\s{1,2}\d+\s{1,2}R??os;
       $del1 =~ s?\s*/AA\s*<<[^>]*>>??os;
    }
-   
+   if ($del1 !~ m'/Resources'o)
+   {  $del1 .= "/Resources $resources";
+   }
+       
    $del1 =~ s/\b(\d+)\s{1,2}\d+\s{1,2}R\b/xform() . ' 0 R'/oegs;
 
    $utrad = "$ny 0 obj\n<<$del1\n" . '>>';
