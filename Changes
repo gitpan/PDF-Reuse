@@ -1,5 +1,8 @@
 Revision history for Perl extension PDF::Reuse.
 
+0.09  Mon Jul 21 2003
+     If no file name is given to the function prFile, output is written to STDOUT. 
+
 0.08  Sun Jun 29
      Corrected bugs which occurred when a font was going to be reused. The function
      prInitVars has been added. changes to the documetation.

@@ -14,7 +14,7 @@ use autouse 'Compress::Zlib' => qw(compress($));
 use AutoLoader qw(AUTOLOAD);
 
 
-our $VERSION = '0.08';
+our $VERSION = '0.09';
 our @ISA     = qw(Exporter);
 our @EXPORT  = qw(prFile
                   prPage
@@ -231,33 +231,38 @@ sub prFile
    {  prEnd();
       close UTFIL;
    }
-   $filnamn = shift;
+   $filnamn = shift || '-';
    my $kortNamn;
-   my $ri  = rindex($filnamn,'/');
-   if ($ri > 0)
-   {  $kortNamn = substr($filnamn, ($ri + 1));
-      $utfil = $ddir ? $ddir . $kortNamn : $filnamn; 
-   }
-   else
-   {  $utfil = $ddir ? $ddir . $filnamn : $filnamn;
-   }
-   $ri = rindex($utfil,'/');
-   if ($ri > 0)
-   {   my $dirdel = substr($utfil,0,$ri);
-       if (! -e $dirdel)
-       {  mkdir $dirdel || errLog("Couldn't create dir $dirdel, $!");
+   if ($filnamn ne '-')
+   {   my $ri  = rindex($filnamn,'/');
+       if ($ri > 0)
+       {  $kortNamn = substr($filnamn, ($ri + 1));
+          $utfil = $ddir ? $ddir . $kortNamn : $filnamn; 
        }
+       else
+       {  $utfil = $ddir ? $ddir . $filnamn : $filnamn;
+       }
+       $ri = rindex($utfil,'/');
+       if ($ri > 0)
+       {   my $dirdel = substr($utfil,0,$ri);
+           if (! -e $dirdel)
+           {  mkdir $dirdel || errLog("Couldn't create dir $dirdel, $!");
+           }
+       }
+       else
+       {  $ri = rindex($utfil,'\\');
+          if ($ri > 0)
+          {   my $dirdel = substr($utfil,0,$ri);
+              if (! -e $dirdel)
+              {  mkdir $dirdel || errLog("Couldn't create dir $dirdel, $!");
+              }
+          }
+       }
+
    }
    else
-   {  $ri = rindex($utfil,'\\');
-      if ($ri > 0)
-      {   my $dirdel = substr($utfil,0,$ri);
-          if (! -e $dirdel)
-          {  mkdir $dirdel || errLog("Couldn't create dir $dirdel, $!");
-          }
-      }
+   {   $utfil = $filnamn;
    }
-
    open (UTFIL, ">$utfil") || errLog("Couldn't open file $utfil, $!");
    binmode UTFIL;
    $utrad = '%PDF-1.4' . "\n" . '%âãÏÓ' . "\n";
@@ -265,13 +270,16 @@ sub prFile
    $pos   = syswrite UTFIL, $utrad; 
 
    if (defined $ldir)
-   {   if ($kortNamn)
+   {   if ($utfil eq '-')
+       {   $kortNamn = 'stdout';
+       }
+       if ($kortNamn)
        {  $runfil = $ldir . $kortNamn  . '.dat';
        }
        else
        {  $runfil = $ldir . $filnamn  . '.dat';
        }
-       open (RUNFIL, ">$runfil") || errLog("Couldn't open loggfile $runfil, $!");
+       open (RUNFIL, ">>$runfil") || errLog("Couldn't open loggfile $runfil, $!");
        $log .= "Vers~$VERSION\n";        
    }
 
@@ -1099,8 +1107,8 @@ or transfer.
 
 =back
 
-B<PDF::Reuse::Tutorial shows you best what you can do with this module.
-Look at it first, before proceeding to the functions !>
+PDF::Reuse::Tutorial might show you best what you can do with this module.
+Look at it first, before proceeding to the functions !
 
 =head1 FUNCTIONS
 
@@ -1114,12 +1122,14 @@ The module doesn't make any attempt to import anything from encrypted files.
 
 =over 4
 
-=item prFile ( $fileName )
+=item prFile ( [$fileName] )
 
 File to create. If another file is current when this function is called, the first
-one is written and closed. Only one file is processed at a single moment.
+one is written and closed. Only one file is processed at a single moment. If
+$fileName is undefined, output is written to STDOUT.
 
-Look at any program in this documentation for an example.
+Look at any program in this documentation for an example. prInitVars() shows how
+this function could be used together with a web server.
 
 =item prEnd ()
 
@@ -1567,21 +1577,23 @@ and interactive functions are B<not> initiated. The module "learns" offset and s
 used objects, and can process them faster, but at the same time the size of the 
 program grows.
 
-If you call this function without parameters all global variables, including the
-internal tables, are initiated.
-
    use PDF::Reuse;
    use strict;
    prInitVars(1);
 
-   prDocDir('C:/temp/doc');
-   prLogDir('C:/run');
+   $| = 1;
+   print STDOUT "Content-Type: application/pdf \n\n";
 
-   prFile('myFile.pdf');
+   prFile();         # To send the document uncatalogued to STDOUT                
+
    prForm('best.pdf');
    prText(25, 790, 'Dear Mr. Anders Persson');
    # ...
    prEnd();
+
+If you call this function without parameters all global variables, including the
+internal tables, are initiated.
+
 
 =item prJpeg ( $imageFile, $width, $height )
 
