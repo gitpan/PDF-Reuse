@@ -6,7 +6,7 @@
 # change 'tests => 1' to 'tests => last_test_to_print';
 
 use Test;
-BEGIN { plan tests => 5 };
+BEGIN { plan tests => 6 };
 use Carp;
 ok(1);
 use Compress::Zlib;
@@ -15,8 +15,10 @@ use Digest::MD5;
 ok(3);
 use Exporter;
 ok(4);
+use Data::Dumper;
+ok(5);
 use PDF::Reuse;
-ok(5); # If we made it this far, we're ok.
+ok(6); # If we made it this far, we're ok.
 
 #########################
 

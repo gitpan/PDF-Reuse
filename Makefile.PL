@@ -9,7 +9,8 @@ WriteMakefile(
                           Compress::Zlib => 0,
                           Carp           => 0,
                           Exporter       => 0,
-                          AutoLoader     => 0},
+                          AutoLoader     => 0,
+                          Data::Dumper   => 0},
     ($] >= 5.005 ?    ## Add these new keywords supported since 5.005
       (ABSTRACT_FROM => 'Reuse.pm', 
        AUTHOR     => 'Lars Lundberg elkelund@worldonline.se') : ()),

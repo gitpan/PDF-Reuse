@@ -1,5 +1,13 @@
 Revision history for Perl extension PDF::Reuse.
 
+0.10  Tue Aug 26 2003
+     Added a function to define bookmarks. 
+     Corrected a bug with object numbers.
+     Sometimes the module reserved an object number and didn't need it. Subsequent
+     procedures continued with new object numbers and there was a gap ..
+     Changes to the documentation. "Experimental" has been removed from the 
+     interactive functions.
+      
 0.09  Mon Jul 21 2003
      If no file name is given to the function prFile, output is written to STDOUT. 
 
