@@ -1,5 +1,11 @@
 Revision history for Perl extension PDF::Reuse.
 
+0.12  Tue Sep 9 2003
+     Corrected a "bug". The "typeof info.moddate" can give another result than
+     1 year ago, so an important test at initiation had to be changed.
+     You can have a new parameter with prInit, so the initiation code is shown
+     at document level. By default (now, but not before) it is not shown. 
+
 0.11  Wed Sep 3 2003
      You can have your bookmarks closed with a new parameter.
      Changes to the documentation.
