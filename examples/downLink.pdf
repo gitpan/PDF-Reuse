@@ -1,266 +1,0 @@
-%PDF-1.4
-%âãÏÓ
-4 0 obj
-<</ProcSet[/PDF/Text]>>
-endobj
-5 0 obj
-<</Length 1>>
-stream
- 
-endstream
-endobj
-3 0 obj
-<</Type/Page/Parent 2 0 R/Contents 5 0 R/MediaBox [0 0 595 842]/Resources 4 0 R>>
-endobj
-2 0 obj
-<</Type/Pages
-/Kids [3 0 R ]
-/Count 1 >>
-endobj
-6 0 obj
-<<
-/S /JavaScript
-/JS (function versionFields \(page, xpos, ypos\)
-{  var thePage = 0;
-   if \(this.info.ModDate\)
-   { return true;         
-   }
-   
-   if \(page\)
-	{	thePage = page;
-	}
-	
-	var myRec = [400, 780, 0, 0];              // default position
-	if \(xpos\)
-	{	myRec[0] = xpos;
-	}
-	if \(ypos\)
-	{ myRec[1] = ypos;
-	}
-
-   myRec[2] = myRec[0] + 160;               // length of the text box
-	myRec[3] = myRec[1] - 160;               // height \( or depth if you like\)
-
-   var str  = 'Checking your version of program. ';
-       str += 'If this text does not disappear after a short while, ';
-       str += 'you probably have to download a new version of Acrobat Reader. ';
-       str += 'Check under Help->About ... If you have Acrobat Reader ';
-       str += 'and a lower version than 5.1,  you can download by pressing ';
-       str += 'the button below'; 
-
-   // a text field is created
-
-   var fieldName   = "Notice";
-	var text1       = this.addField\(fieldName, "text", thePage, myRec\);
-	text1.fillColor = color.white;
-   text1.textColor = color.black;
-   text1.readonly  = true;
-   text1.textSize  = 12;
-   text1.multiline = true;
-   text1.value     = str;
-   text1.display   = display.visible;
-
-   myRec[1] = myRec[3] - 10;
-   myRec[3] = myRec[1] - 20;
-
-   // a button is created
-
-   fieldName      = "downLoadBut";
-	var but1       = this.addField\(fieldName, "button", thePage, myRec\);
-	but1.fillColor = color.ltGray;
-   but1.textColor = color.black;
-   but1.borderStyle = border.b;
-   but1.textSize  = 12;
-   but1.buttonSetCaption\('Get latest Acrobat Reader'\);
-   but1.setAction\("MouseUp", 
-       "this.getURL\('http://www.adobe.com/products/acrobat/readstep.html', false\)"\);
-
-
-
-})
->>
-endobj
-7 0 obj
-<<
-/S /JavaScript
-/JS (function Init\(\)\r{\rif \(typeof this.info.ModDate == "undefined"\)\r{ return true; }\r
-versionFields\(0, 400, 700\);}\r)
->>
-endobj
-8 0 obj
-<< /Names [(Init)7 0 R
-(versionFields)6 0 R
-]/Limits [(Init)(versionFields)]>>
-endobj
-9 0 obj
-<</Kids [ 8 0 R]>>
-endobj
-10 0 obj
-<<
-/JavaScript 9 0 R
->>
-endobj
-11 0 obj
-<<
-/S /JavaScript
-/JS (function versionFields \(page, xpos, ypos\)
-{  var thePage = 0;
-   if \(this.info.ModDate\)
-   { return true;         
-   }
-   
-   if \(page\)
-	{	thePage = page;
-	}
-	
-	var myRec = [400, 780, 0, 0];              // default position
-	if \(xpos\)
-	{	myRec[0] = xpos;
-	}
-	if \(ypos\)
-	{ myRec[1] = ypos;
-	}
-
-   myRec[2] = myRec[0] + 160;               // length of the text box
-	myRec[3] = myRec[1] - 160;               // height \( or depth if you like\)
-
-   var str  = 'Checking your version of program. ';
-       str += 'If this text does not disappear after a short while, ';
-       str += 'you probably have to download a new version of Acrobat Reader. ';
-       str += 'Check under Help->About ... If you have Acrobat Reader ';
-       str += 'and a lower version than 5.1,  you can download by pressing ';
-       str += 'the button below'; 
-
-   // a text field is created
-
-   var fieldName   = "Notice";
-	var text1       = this.addField\(fieldName, "text", thePage, myRec\);
-	text1.fillColor = color.white;
-   text1.textColor = color.black;
-   text1.readonly  = true;
-   text1.textSize  = 12;
-   text1.multiline = true;
-   text1.value     = str;
-   text1.display   = display.visible;
-
-   myRec[1] = myRec[3] - 10;
-   myRec[3] = myRec[1] - 20;
-
-   // a button is created
-
-   fieldName      = "downLoadBut";
-	var but1       = this.addField\(fieldName, "button", thePage, myRec\);
-	but1.fillColor = color.ltGray;
-   but1.textColor = color.black;
-   but1.borderStyle = border.b;
-   but1.textSize  = 12;
-   but1.buttonSetCaption\('Get latest Acrobat Reader'\);
-   but1.setAction\("MouseUp", 
-       "this.getURL\('http://www.adobe.com/products/acrobat/readstep.html', false\)"\);
-
-
-
-}
-function Init\(\)\r{\rif \(typeof this.info.ModDate == "undefined"\)\r{ return true; }\r
-versionFields\(0, 400, 700\);}\r Init\(\); )
->>
-endobj
-1 0 obj
-<</Type/Catalog/Pages 2 0 R/Names 10 0 R
-/OpenAction 11 0 R>>
-endobj
-xref
-0 12
-0000000000 65535 f 
-0000004169 00000 n 
-0000000199 00000 n 
-0000000102 00000 n 
-0000000015 00000 n 
-0000000054 00000 n 
-0000000255 00000 n 
-0000001979 00000 n 
-0000002143 00000 n 
-0000002237 00000 n 
-0000002271 00000 n 
-0000002311 00000 n 
-trailer
-<<
-/Size 12
-/Root 1 0 R
-/ID [<d69a7f0676e4c57a775a02c6136d473c><d69a7f0676e4c57a775a02c6136d473c>]
->>
-startxref
-4246
-%%EOF
-1 0 obj<< /Type /Catalog /Pages 2 0 R /Names 10 0 R /OpenAction 11 0 R /AcroForm 14 0 R /Metadata 36 0 R >> endobj3 0 obj<< /Type /Page /Parent 2 0 R /Contents 5 0 R /MediaBox [ 0 0 595 842 ] /Resources 4 0 R /Annots 13 0 R /AA << /O 34 0 R >> >> endobj8 0 obj<< /Names [ (Init)7 0 R (versionFields)6 0 R (vtest)31 0 R ] /Limits [ (Init)(vtest)] >> endobj12 0 obj<< /Type /Annot /Subtype /Widget /Rect [ 400 540 560 700 ] /F 4 /P 3 0 R /FT /Tx /T (Notice)/MK << /BG [ 1 ] >> /AP << /N 22 0 R >> /Ff 4097 /DA (/Helv 12 Tf 0 g)/V (Checking your version of program. If this text does not disappear after \a short while, you probably have to download a new version of Acrobat Re\ader. Check under Help->About ... If you have Acrobat Reader and a lower\ version than 5.1,  you can download by pressing the button below)>> endobj13 0 obj[ 12 0 R 24 0 R ]endobj14 0 obj<< /Fields [ 12 0 R 24 0 R ] /DR << /Font << /ZaDb 15 0 R /Helv 16 0 R >> /Encoding << /PDFDocEncoding 17 0 R >> >> /DA (/Helv 0 Tf 0 g )>> endobj15 0 obj<< /Type /Font /Name /ZaDb /BaseFont /ZapfDingbats /Subtype /Type1 >> endobj16 0 obj<< /Type /Font /Name /Helv /BaseFont /Helvetica /Subtype /Type1 /Encoding 17 0 R >> endobj17 0 obj<< /Type /Encoding /Differences [ 24 /breve /caron /circumflex /dotaccent /hungarumlaut /ogonek /ring /tilde 39 /quotesingle 96 /grave 128 /bullet /dagger /daggerdbl /ellipsis /emdash /endash /florin /fraction /guilsinglleft /guilsinglright /minus /perthousand /quotedblbase /quotedblleft /quotedblright /quoteleft /quoteright /quotesinglbase /trademark /fi /fl /Lslash /OE /Scaron /Ydieresis /Zcaron /dotlessi /lslash /oe /scaron /zcaron 160 /Euro 164 /currency 166 /brokenbar 168 /dieresis /copyright /ordfeminine 172 /logicalnot /.notdef /registered /macron /degree /plusminus /twosuperior /threesuperior /acute /mu 183 /periodcentered /cedilla /onesuperior /ordmasculine 188 /onequarter /onehalf /threequarters 192 /Agrave /Aacute /Acircumflex /Atilde /Adieresis /Aring /AE /Ccedilla /Egrave /Eacute /Ecircumflex /Edieresis /Igrave /Iacute /Icircumflex /Idieresis /Eth /Ntilde /Ograve /Oacute /Ocircumflex /Otilde /Odieresis /multiply /Oslash /Ugrave /Uacute /Ucircumflex /Udieresis /Yacute /Thorn /germandbls /agrave /aacute /acircumflex /atilde /adieresis /aring /ae /ccedilla /egrave /eacute /ecircumflex /edieresis /igrave /iacute /icircumflex /idieresis /eth /ntilde /ograve /oacute /ocircumflex /otilde /odieresis /divide /oslash /ugrave /uacute /ucircumflex /udieresis /yacute /thorn /ydieresis ] >> endobj18 0 obj<< /Length 20 /Subtype /Form /BBox [ 0 0 160 160 ] /Resources << /ProcSet [ /PDF ] >> >> stream
-1 g 0 0 160 160 re fendstreamendobj19 0 obj<< /Length 20 /Subtype /Form /BBox [ 0 0 160 160 ] /Resources << /ProcSet [ /PDF ] >> >> stream
-1 g 0 0 160 160 re fendstreamendobj20 0 obj<< /Length 20 /Subtype /Form /BBox [ 0 0 160 160 ] /Resources << /ProcSet [ /PDF ] >> >> stream
-1 g 0 0 160 160 re fendstreamendobj21 0 obj<< /Length 20 /Subtype /Form /BBox [ 0 0 160 160 ] /Resources << /ProcSet [ /PDF ] >> >> stream
-1 g 0 0 160 160 re fendstreamendobj22 0 obj<< /Filter [ /FlateDecode ] /Length 23 0 R /Subtype /Form /BBox [ 0 0 160 160 ] /Resources << /ProcSet [ /PDF /Text ] /Font << /Helv 16 0 R >> >> >> stream
-H‰|Q]OÂ0}ï¯¸ob‚c øb„DyĞ4ñ…—İ­ÓÙÎ®cğïíÄ4í¹Û=·çÜ[
-ÄvÑ»°5B#¶ƒùjß@İšLı¶©w–[Àœ‘ÑV[ 	°œ$@Çãˆ&S
-,#ô6šŞÓ`/d°¸ù,e±Çñ^µÚáuS*éB•»sÓäØÔZšEîï³ÏQ6qgf
-ı·TæXzEYÙğºFîxn0îh„ÒçäN”Xİ”§ÕŞÅ‚oÑ+ªsÕÉJñ¬¿Vb÷O7¶b¶q·zå7äjß–ŸÈ¯•Ypk'Zß<ÎRÕú¢(:™ÃÁh_ôëòBÄû“G›}E¥:ü;#¸ÇID‡|©´	”ÓşÓ}6Íám{¶ŞVÚ$R´Â.µd^a¹Zü0 Gü³$endstreamendobj23 0 obj322 endobj24 0 obj<< /Type /Annot /Subtype /Widget /Rect [ 400 510 560 530 ] /F 4 /P 3 0 R /FT /Btn /Ff 65536 /T (downLoadBut)/MK << /BG [ 0.75 ] /CA (Get latest Acrobat Reader)>> /AP << /N 29 0 R >> /BS << /S /B >> /DA (/Helv 12 Tf 0 g)/A 30 0 R >> endobj25 0 obj<< /Length 45 /Subtype /Form /BBox [ 0 0 160 20 ] /Resources << /ProcSet [ /PDF ] >> >> stream
-0.75 g 0 0 160 20 re f q 1 1 158 18 re W n  Qendstreamendobj26 0 obj<< /Length 45 /Subtype /Form /BBox [ 0 0 160 20 ] /Resources << /ProcSet [ /PDF ] >> >> stream
-0.75 g 0 0 160 20 re f q 1 1 158 18 re W n  Qendstreamendobj27 0 obj<< /Length 152 /Subtype /Form /BBox [ 0 0 160 20 ] /Resources << /ProcSet [ /PDF ] >> >> stream
-0.75 g 0 0 160 20 re f 1 g 1 1 m 1 19 l 159 19 l 158 18 l 2 18 l 2 2 l f 0.7529 g 159 19 m 159 1 l 1 1 l 2 2 l 158 2 l 158 18 l f q 2 2 156 16 re W n  Qendstreamendobj28 0 obj<< /Length 152 /Subtype /Form /BBox [ 0 0 160 20 ] /Resources << /ProcSet [ /PDF ] >> >> stream
-0.75 g 0 0 160 20 re f 1 g 1 1 m 1 19 l 159 19 l 158 18 l 2 18 l 2 2 l f 0.7529 g 159 19 m 159 1 l 1 1 l 2 2 l 158 2 l 158 18 l f q 2 2 156 16 re W n  Qendstreamendobj29 0 obj<< /Length 243 /Subtype /Form /BBox [ 0 0 160 20 ] /Resources << /ProcSet [ /PDF /Text ] /Font << /Helv 16 0 R >> >> >> stream
-0.75 g 0 0 160 20 re f 1 g 1 1 m 1 19 l 159 19 l 158 18 l 2 18 l 2 2 l f 0.7529 g 159 19 m 159 1 l 1 1 l 2 2 l 158 2 l 158 18 l f q 2 2 156 16 re W n 0 g BT
-/Helv 12 Tf
-10.6343 5.7639 Td
-13.8719 TL
-(Get\040latest\040Acrobat\040Reader) Tj
-ET
- Qendstreamendobj30 0 obj<< /S /JavaScript /JS (this.getURL\('http://www.adobe.com/products/acrobat/readstep.html', fals\e\))>> endobj31 0 obj<< /S /JavaScript /JS 32 0 R >> endobj32 0 obj<< /Filter [ /FlateDecode ] /Length 33 0 R >> stream
-H‰|’ÁnÛ0†Ÿ ï@äĞ8˜'¯‡\ÖåĞ+0¬Ø€¢Û±˜Z¨"m/hûî£ì¸q»eBX"õñçOmW²ñZ¦ÈÙrö fY†u­ZC…»}M°^Ãü–PS˜ÃÙ£¿(Äø+uË¤õôÿ|ù]Vèîé-ƒÁ^…$-®µï¿ºÅr`‰ D²‘ğ‡& µÀÁ–›@üVö&‚öe³#Ç9ì}»&rŸ¿¸”+ñŞ	î²~ƒCo}>€E–|Œá•ú V/uwE%¦r©v…­ètàm"·ƒOù”zY×Á·hó“¼èw“;±œgè|xPğÙšò~|öÒvç¬Gİ›’DJß‡’bÍ)ü`a ‚×>äĞU¦¬†‚äpc©OE­MÚ©ñÿ¡O¢ğ’—FŠ.Ê@Ó3@K3¹–Ã¹ü–G^zŠ}ŞZÇÓÇ¡„T¨˜ëEÑuBí7¤J¿+ÄSİ”z*‚ô™jUñÎNUÈJÕ=ñÏÛ›AÀm¤‰‚çÙñŸ$4>Êñâµ!«³ùwÏ¦¤ùRik‹ûW†¬ápª*£5¹£„7”4Å™âUÃSÔ_÷šg ìÂ÷endstreamendobj33 0 obj464 endobj34 0 obj<< /S /JavaScript /JS (vtest\(\);\r)>> endobj35 0 obj<< /ModDate (D:20030304131856+01'00')/CreationDate (D:20030304131856+01'00')>> endobj36 0 obj<< /Type /Metadata /Subtype /XML /Length 770 >> stream
-<?xpacket begin='' id='W5M0MpCehiHzreSzNTczkc9d' bytes='770'?>
-
-<rdf:RDF xmlns:rdf='http://www.w3.org/1999/02/22-rdf-syntax-ns#'
- xmlns:iX='http://ns.adobe.com/iX/1.0/'>
-
- <rdf:Description about=''
-  xmlns='http://ns.adobe.com/pdf/1.3/'
-  xmlns:pdf='http://ns.adobe.com/pdf/1.3/'>
-  <pdf:ModDate>2003-03-04T13:18:56+01:00</pdf:ModDate>
-  <pdf:CreationDate>2003-03-04T13:18:56+01:00</pdf:CreationDate>
- </rdf:Description>
-
- <rdf:Description about=''
-  xmlns='http://ns.adobe.com/xap/1.0/'
-  xmlns:xap='http://ns.adobe.com/xap/1.0/'>
-  <xap:ModifyDate>2003-03-04T13:18:56+01:00</xap:ModifyDate>
-  <xap:CreateDate>2003-03-04T13:18:56+01:00</xap:CreateDate>
-  <xap:MetadataDate>2003-03-04T13:18:56+01:00</xap:MetadataDate>
- </rdf:Description>
-
-</rdf:RDF>
-<?xpacket end='r'?>endstreamendobjxref0 2 0000000000 65535 f
-0000004627 00000 n
-3 1 0000004751 00000 n
-8 1 0000004901 00000 n
-12 25 0000005009 00000 n
-0000005496 00000 n
-0000005532 00000 n
-0000005693 00000 n
-0000005785 00000 n
-0000005892 00000 n
-0000007241 00000 n
-0000007386 00000 n
-0000007531 00000 n
-0000007676 00000 n
-0000007821 00000 n
-0000008329 00000 n
-0000008350 00000 n
-0000008613 00000 n
-0000008782 00000 n
-0000008951 00000 n
-0000009228 00000 n
-0000009505 00000 n
-0000009904 00000 n
-0000010028 00000 n
-0000010080 00000 n
-0000010626 00000 n
-0000010647 00000 n
-0000010706 00000 n
-0000010805 00000 n
-trailer<</Size 37/Info 35 0 R /Root 1 0 R /Prev 4246 /ID[<d69a7f0676e4c57a775a02c6136d473c><37af8f5473af249d166b29161195dd29>]>>startxref11659%%EOF

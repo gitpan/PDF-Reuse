@@ -4,3 +4,6 @@ Revision history for Perl extension PDF::Reuse.
 	- original version; created by h2xs 1.22 with options
 		-AX -n PDF::Reuse
 
+0.02  Fri Apr 25 20:49:50 2003
+   - I had to put all PDF documents and generated modules used in the examples 
+     in a zipfile, to hide them from the normal processing around the upload to CPAN.

@@ -13,7 +13,7 @@ use autouse 'Carp' => qw(carp
 use autouse 'Compress::Zlib' => qw(compress);
 use SelfLoader;
 
-our $VERSION = '0.01';
+our $VERSION = '0.02';
 our @ISA     = qw(Exporter);
 our @EXPORT  = qw(prFile
                   prPage

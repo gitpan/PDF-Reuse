@@ -1,4 +1,4 @@
-PDF/Reuse version 0.01
+PDF/Reuse version 0.02
 ======================
 
 This module gives you a possibility to reuse PDF-files. You can use pages,
@@ -65,6 +65,10 @@ Under other operating systems try the following:
    make install
 
 
+N.B.
+In the examples directory there is a zipfile with PDF documents and generated
+modules. Unzip it. I had to put all these files like that, to hide them from
+the normal processing around the upload to CPAN.   
 
 DEPENDENCIES
 
