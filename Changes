@@ -1,5 +1,11 @@
 Revision history for Perl extension PDF::Reuse.
 
+0.20 Sun Dec 14 2003
+     -You can extract pages or split documents with the help of two
+     new parameters to prDoc. 
+     -prField can have a snippet of JavaScript code instead of a value.
+     -Bugs removed. Internal changes.
+     
 0.19 Fri Nov 21 2003
      Code produced for prField is now prepared with "extra" backslashes for 
      \n \r and \'. Improved precision in the "formula" for rotation.

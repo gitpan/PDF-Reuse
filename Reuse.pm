@@ -16,7 +16,7 @@ use autouse 'Compress::Zlib' => qw(compress($)
 use autouse 'Data::Dumper'   => qw(Dumper);
 use AutoLoader qw(AUTOLOAD);
 
-our $VERSION = '0.19';
+our $VERSION = '0.20';
 our @ISA     = qw(Exporter);
 our @EXPORT  = qw(prFile
                   prPage
@@ -66,7 +66,7 @@ our (@kids, @counts, @formBox, @objekt, @parents, @aktuellFont, @skapa,
 our ( %old, %oldObject, %resurser, %form, %image, %objRef, %nyaFunk, %fontSource, 
      %sidFont, %sidXObject, %sidExtGState, %font, %intAct, %fields, %script, 
      %initScript, %sidPattern, %sidShading, %sidColorSpace, %knownToFile,
-     %processed, %embedded, %unZipped);
+     %processed, %embedded, %dummy, %behandlad, %unZipped);
 
 our $stream  = '';
 our $idTyp   = '';
@@ -138,7 +138,6 @@ use constant   foSOURCE     => 4;
 our $xScale   = 1;
 our $yScale   = 1;
 our $touchUp  = 1;
-our $lastFile = '+';
 
 our %stdFont = 
        ('Times-Roman'           => 'Times-Roman',
@@ -303,7 +302,8 @@ sub prFile
    %objRef      = ();
    %knownToFile = ();
    @aktuellFont = ();
-   %processed   = ();
+   %old         = ();
+   %behandlad   = ();
    @bookmarks   = ();
    undef $defGState;
    undef $interActive;
@@ -1286,14 +1286,27 @@ prCompress(); is a directive not to compress. This is default.
 
 See e.g. "Starting to reuse" in the tutorial for an example.
 
-=head2 prDoc		- include a document 
+=head2 prDoc		- include pages from a document 
 
-   prDoc ( $documentName )
+   prDoc ( $documentName, $firstPage, $lastPage )
 
-Returns number of pages.
-Adds a document to the document you are creating. If it is the first interactive
+or with the parameters in an anonymous hash:
+
+   prDoc ( { file  => $documentName,
+             first => $firstPage,
+             last  => $lastPage } );
+
+Returns number of extracted pages.
+
+If "first" is not given, 1 is assumed. If "last" is not given, you don't have any upper
+limit. N.B. The numbering of the pages differs from Acrobat JavaScript. In JavaScript
+the first page has index 0. 
+
+Adds pages from a document to the one you are creating. If it is the first interactive
 component ( prDoc() or prDocForm() ) the interactive functions are kept and also merged
-with JavaScripts you have added (if any).
+with JavaScripts you have added, if any. But, if you specify a first page different than 1
+or a last page, no JavaScript are extracted from the document, because then there is a
+risk that an included JavaScript function might refer to something not included.
 
    use PDF::Reuse;
    use strict;
@@ -1307,8 +1320,21 @@ with JavaScripts you have added (if any).
    prPage();                              # page break
    prForm('best.pdf');                    # page 1 from best.pdf
    prText(150, 700, 'Customer Data');     # a line of text
-   prEnd(); 
+   prEnd();
 
+To extract pages 2-3 and 5-7 from a document and create a new document:
+
+   use PDF::Reuse;
+   use strict;
+    
+   prFile('new.pdf');
+   prDoc( { file  => 'old.pdf',
+            first => 2, 
+            last  => 3 });
+   prDoc( { file  => 'old.pdf',
+            first => 5, 
+            last  => 7 });
+   prEnd();
 
 =head2 prDocDir		- set directory for produced documents 
 
@@ -1413,13 +1439,21 @@ can write like this:
    my $string = "This is the first line \r second line \n 3:rd line";
    prField('fieldName', $string);
 
-
 If you have single-quotes it is more complicated. You need 3 backslashes 
 to preserve the special characters.
 
    my $string = 'This is the first line \\\r second line \\\n 3:rd line';
    prField('fieldName', $string);
 
+You can also let '$value' be a  snippet of JavaScript-code that assigns something
+to the field. Then you have to put 'js:' first in "$value" like this:
+
+   my $sentence = encrypt('This will be decrypted by "unPack"(JavaScript) ');
+   prField('Interest_9', "js: unPack('$sentence')");
+
+If you refer to a JavaScript function, it has to be included with prJs first. (The
+JavaScript interpreter will simply not be aware of old functions in the PDF-document,
+when the initiation is done.)
 
 =head2 prFont		- set current font 
 
@@ -1807,9 +1841,14 @@ because the interpreter hasn't come that far, when initiation is done.
 B<$duplicateCode> is undefined or anything. It duplicates the JavaScript code
 which has been used at initiation, so you can look at it from within Acrobat and
 debug it. It makes the document bigger. This parameter is B<deprecated>.
-  
+
 See prJs() for an example
 
+Remark: Avoid to use "return" in the code you use at initiation. If your user has
+downloaded a page with Web Capture, and after that opens a PDF-document where a 
+JavaScript is run at initiation and that JavaScript contains a return-statement,
+a bug occurs. The JavaScript interpreter "exits" instead of returning, the execution
+of the JavaScript might finish to early. This is a bug in Acrobat/Reader 5.
 
 =head2 prInitVars		- initiate global variables and internal tables 
 
@@ -2340,10 +2379,10 @@ sub prInitVars
     (@kids, @counts, @formBox, @objekt, @parents, @aktuellFont, @skapa,
      @jsfiler, @inits, @bookmarks) = ();
 
-    ( %old, %oldObject, %resurser,  %objRef, %nyaFunk, 
+    ( %resurser,  %objRef, %nyaFunk,%oldObject, %unZipped, 
       %sidFont, %sidXObject, %sidExtGState, %font, %fields, %script,
       %initScript, %sidPattern, %sidShading, %sidColorSpace, %knownToFile,
-      %processed, %unZipped) = ();
+      %processed, %dummy) = ();
 
      $stream = '';
      $idTyp  = '';
@@ -2504,8 +2543,6 @@ sub prMbox
    1;
 }
 
-
-
 sub prField
 {  my ($fieldName, $fieldValue) = @_;
    if ($interAktivSida)
@@ -2515,6 +2552,15 @@ sub prField
    {  errLog("Too early INITIATE FIELDS, create a file first");
    }
    $fields{$fieldName} = $fieldValue;
+   if ($fieldValue =~ m'^\s*js\s*\:(.*)'oi)
+   {  my $code = $1;
+      my @fall = ($code =~ m'([\w\d\_\$]+)\s*\(.*?\)'gs);
+      for (@fall)
+      {  if (! exists $initScript{$_})
+         { $initScript{$_} = 0; 
+         }
+      }
+   }
    if ($runfil)
    {   $fieldName  = prep($fieldName);
        $fieldValue = prep($fieldValue);
@@ -2615,7 +2661,18 @@ sub prExtract
 
 ########## Extrahera ett dokument ####################       
 sub prDoc
-{ my $infil = shift;
+{ my ($infil, $first, $last); 
+  my $param = shift;
+  if (ref($param) eq 'HASH')
+  {  $infil = $param->{'file'};
+     $first = $param->{'first'} || 1;
+     $last  = $param->{'last'} || '';
+  }
+  else
+  {  $infil = $param;
+     $first = shift || 1;
+     $last  = shift || '';     
+  }
   
   if ($stream)
   {  if ($stream =~ m'\S+'os)
@@ -2628,7 +2685,7 @@ sub prDoc
   { $objNr--;
   }
   
-  my $sidor = analysera($infil);
+  my $sidor = analysera($infil, $first, $last);
   if (($Names) || ($AARoot) || ($AcroForm))
   { $NamesSaved     = $Names;
     $AARootSaved    = $AARoot;
@@ -2637,7 +2694,7 @@ sub prDoc
   }
   if ($runfil)
   {   $infil = prep($infil);
-      $log .= "Doc~$infil\n";
+      $log .= "Doc~$infil~$first~$last\n";
   }
   if (! $pos)
   {  errLog("No output file, you have to call prFile first");
@@ -2825,7 +2882,7 @@ sub calcMatrix
        {   $upperX = 0;
            $upperY = 0;
        }  
-       my $radian = sprintf("%.6f", $rotate / 57.296);    # approx. 
+       my $radian = sprintf("%.6f", $rotate / 57.2957795);    # approx. 
        my $Cos    = sprintf("%.6f", cos($radian));
        my $Sin    = sprintf("%.6f", sin($radian));
        my $negSin = $Sin * -1;
@@ -3536,10 +3593,10 @@ sub getObject
     }
     else
     {   if (wantarray)
-        {   return ("$unZipped{$nr} endobj", $offs, $siz, $embedded)
+        {   return ("$unZipped{$nr} endobj\n", $offs, $siz, $embedded)
         }
         else
-        {   return "$unZipped{$nr} endobj";
+        {   return "$unZipped{$nr} endobj\n";
         }
     } 
 }
@@ -3657,23 +3714,33 @@ sub getPage
    }
    $form{$fSource}[fID] =  $checkId;
    $checkId = '';
+   $behandlad{$infil}->{old} = {} 
+        unless (defined $behandlad{$infil}->{old});
+   $processed{$infil}->{oldObject} = {} 
+        unless (defined $processed{$infil}->{oldObject});   
+   $processed{$infil}->{unZipped} = {} 
+        unless (defined $processed{$infil}->{unZipped});
 
-   if (exists $processed{$infil})
-   {  %old = %{$processed{$infil}};
+   if ($action eq 'print')
+   {  *old = $behandlad{$infil}->{old};
    }
    else
-   {  %old = ();
+   {  $behandlad{$infil}->{dummy} = {};
+      *old = $behandlad{$infil}->{dummy};
    }
+   
+   *oldObject =  $processed{$infil}->{oldObject};
+   *unZipped  = $processed{$infil}->{unZipped};
+   $root      = (exists $processed{$infil}->{root}) 
+                    ? $processed{$infil}->{root} : 0;
+   
    
    my @stati = stat($infil);
    open (INFIL, "<$infil") || errLog("Couldn't open $infil, $!");
    binmode INFIL;
 
-   if ($infil ne $lastFile)
-   {  $lastFile = $infil;
-      %oldObject = ();
-      %unZipped  = ();   
-      $root = xRefs($stati[7], $infil);
+   if (! $root)
+   {  $root = xRefs($stati[7], $infil);
    }
 
    #############
@@ -3805,8 +3872,7 @@ sub getPage
                 {  last; }
              } 
           }
-      }
-      
+      }      
    }
 
    my $rform = \$form{$fSource};
@@ -3969,7 +4035,6 @@ sub getPage
        }
    }
    
-
    my $ref = \$form{$fSource};
    my @kids;
    my @nokids;  
@@ -4000,10 +4065,10 @@ sub getPage
    if ($action ne 'print')
    {  $objNr = $objNrSaved;            # Restore objNo if nothing was printed
    }
-   else
-   {   %{$processed{$infil}} = %old;   # Save account of processed objects
-   }
- 
+
+   $behandlad{$infil}->{dummy} = {};
+   *old = $behandlad{$infil}->{dummy};
+    
    $objNrSaved = $objNr;               # Save objNo
 
    if ($sidor == 1)
@@ -4072,8 +4137,7 @@ sub getPage
   }
 
   $objNr = $objNrSaved;
-  %old = ();
-   
+  $processed{$infil}->{root}         = $root;
   close INFIL;
   return $referens;
 }  
@@ -4085,15 +4149,14 @@ sub getPage
 
 sub xform
 {  if (exists $old{$1})
-   {  $old{$1}; }
+   {  $old{$1}; 
+   }
    else
    {  push @skapa, [$1, ++$objNr];
       $old{$1} = $objNr;                   
    } 
-}  
-  
-
-
+}
+ 
 sub kolla
 {  #
    # Resurser
@@ -4156,13 +4219,17 @@ sub byggForm
    my $fSource = $infil . '_' . $sidnr;
    my @stati = stat($infil);
 
-   if (exists $processed{$infil})
-   {  %old = %{$processed{$infil}};
-   }
-   else
-   {  %old = ();
-   }
+   $behandlad{$infil}->{old} = {} 
+        unless (defined $behandlad{$infil}->{old});
+   $processed{$infil}->{oldObject} = {} 
+        unless (defined $processed{$infil}->{oldObject});   
+   $processed{$infil}->{unZipped} = {} 
+        unless (defined $processed{$infil}->{unZipped});
 
+   *old       = $behandlad{$infil}->{old};
+   *oldObject = $processed{$infil}->{oldObject};
+   *unZipped  = $processed{$infil}->{unZipped};
+      
    if ($form{$fSource}[fID] != $stati[9])
    {    errLog("$stati[9] ne $form{$fSource}[fID] aborts");
    }
@@ -4181,11 +4248,6 @@ sub byggForm
 
    open (INFIL, "<$infil") || errLog("The file $infil couldn't be opened, aborting $!");
    binmode INFIL;
-
-   if ($infil ne $lastFile)
-   {  $lastFile = $infil;
-      %unZipped  = ();   
-   }
 
    ####################################################
    # Objekt utan referenser  kopieras och skrivs
@@ -4272,7 +4334,6 @@ sub byggForm
 
    if (exists $old{$key})                      # already processed
    {  close INFIL;
-      %{$processed{$infil}} = %old;
       return $old{$key}; 
    }
 
@@ -4300,8 +4361,6 @@ sub byggForm
    $pos += syswrite UTFIL, $utrad;                    
    close INFIL;
 
-   %{$processed{$infil}} = %old;
-
    return $nr;   
 }
 
@@ -4319,14 +4378,18 @@ sub getImage
    my ($res, $corr, $nyDel1, $del1, $del2, $nr, $utrad);
    my $fSource = $infil . '_' . $sidnr;
    my $iSource = $fSource . '_' . $bildnr;
-  
-   if (exists $processed{$infil})
-   {  %old = %{$processed{$infil}};
-   }
-   else
-   {  %old = ();
-   }
 
+   $behandlad{$infil}->{old} = {} 
+        unless (defined $behandlad{$infil}->{old});
+   $processed{$infil}->{oldObject} = {} 
+        unless (defined $processed{$infil}->{oldObject});   
+   $processed{$infil}->{unZipped} = {} 
+        unless (defined $processed{$infil}->{unZipped});  
+
+   *old       = $behandlad{$infil}->{old};
+   *oldObject = $processed{$infil}->{oldObject};
+   *unZipped  = $processed{$infil}->{unZipped};
+      
    my @stati = stat($infil);
 
    if ($form{$fSource}[fID] != $stati[9])
@@ -4340,12 +4403,6 @@ sub getImage
    open (INFIL, "<$infil") || errLog("The file $infil couldn't be opened, $!");
    binmode INFIL; 
 
-   if ($infil ne $lastFile)
-   {  $lastFile = $infil;
-      %unZipped  = ();
-   }
-
-    
    #########################################################
    # En bild med referenser kopieras, behandlas och skrivs
    #########################################################
@@ -4390,7 +4447,6 @@ sub getImage
    }
         
    close INFIL;
-   %{$processed{$infil}} = %old; 
    return $nr;   
    
 }
@@ -4411,14 +4467,18 @@ sub AcroFormsEtc
    
    my ($res, $corr, $nyDel1, @objData, $del1, $del2, $utrad);
    my $fSource = $infil . '_' . $sidnr;
-   
-   if (exists $processed{$infil})
-   {  %old = %{$processed{$infil}};
-   }
-   else
-   {  %old = ();
-   }
-  
+
+   $behandlad{$infil}->{old} = {} 
+        unless (defined $behandlad{$infil}->{old});
+   $processed{$infil}->{oldObject} = {} 
+        unless (defined $processed{$infil}->{oldObject});   
+   $processed{$infil}->{unZipped} = {} 
+        unless (defined $processed{$infil}->{unZipped});   
+
+   *old       = $behandlad{$infil}->{old};
+   *oldObject = $processed{$infil}->{oldObject};
+   *unZipped  = $processed{$infil}->{unZipped};
+        
    my @stati = stat($infil);
    if ($form{$fSource}[fID] != $stati[9])
    {    print "$stati[9] ne $form{$fSource}[fID]\n";
@@ -4427,11 +4487,6 @@ sub AcroFormsEtc
     
    open (INFIL, "<$infil") || errLog("The file $infil couldn't be opened, aborting $!");
    binmode INFIL;
-
-   if ($infil ne $lastFile)
-   {  $lastFile = $infil;
-      %unZipped  = ();
-   }
 
    my $fdSidnr = $intAct{$fSource}[iSTARTSIDA];
    $old{$fdSidnr} = $sidObjNr;
@@ -4499,7 +4554,6 @@ sub AcroFormsEtc
    }
     
    close INFIL;
-   %{$processed{$infil}} = %old;
    1;
 } 
 
@@ -4513,13 +4567,18 @@ sub extractName
    my ($res, $del1, $resType, $key, $corr, $formRes, $kids, $nr, $utrad);
    my $del2 = '';
    @skapa = ();
-   if (exists $processed{$infil})
-   {  %old = %{$processed{$infil}};
-   }
-   else
-   {  %old = ();
-   }
-  
+   
+   $behandlad{$infil}->{old} = {} 
+        unless (defined $behandlad{$infil}->{old});
+   $processed{$infil}->{oldObject} = {} 
+        unless (defined $processed{$infil}->{oldObject});   
+   $processed{$infil}->{unZipped} = {} 
+        unless (defined $processed{$infil}->{unZipped});
+
+   *old       = $behandlad{$infil}->{old};
+   *oldObject = $processed{$infil}->{oldObject};
+   *unZipped  = $processed{$infil}->{unZipped};
+   
    my $fSource = $infil . '_' . $sidnr;
 
    my @stati = stat($infil);
@@ -4542,11 +4601,6 @@ sub extractName
 
    open (INFIL, "<$infil") || errLog("The file $infil couldn't be opened, aborting $!");
    binmode INFIL;
-
-   if ($infil ne $lastFile)
-   {  $lastFile = $infil;
-      %unZipped  = ();
-   }
 
    #################################
    # Resurserna läses
@@ -4691,7 +4745,7 @@ sub extractName
       }
    }
    close INFIL;
-   %{$processed{$infil}} = %old;
+   
    return $namn;   
  
 }
@@ -4708,13 +4762,17 @@ sub extractObject
    my $del2 = '';
    @skapa = ();
 
-   if (exists $processed{$infil})
-   {  %old = %{$processed{$infil}};
-   }
-   else
-   {  %old = ();
-   }
+   $behandlad{$infil}->{old} = {} 
+        unless (defined $behandlad{$infil}->{old});
+   $processed{$infil}->{oldObject} = {} 
+        unless (defined $processed{$infil}->{oldObject});   
+   $processed{$infil}->{unZipped} = {} 
+        unless (defined $processed{$infil}->{unZipped});
 
+   *old       = $behandlad{$infil}->{old};
+   *oldObject = $processed{$infil}->{oldObject};
+   *unZipped  = $processed{$infil}->{unZipped};
+   
    my $fSource = $infil . '_' . $sidnr;
    my @stati = stat($infil);
 
@@ -4738,11 +4796,6 @@ sub extractObject
 
    open (INFIL, "<$infil") || errLog("The file $infil couldn't be opened, aborting $!");
    binmode INFIL;
-
-   if ($infil ne $lastFile)
-   {  $lastFile = $infil;
-      %unZipped  = ();   
-   }
 
    ########################################
    #  Read the top object of the hierarchy
@@ -4850,7 +4903,6 @@ sub extractObject
       }
    }
    close INFIL;
-   %{$processed{$infil}} = %old;
    return $namn;      
 }
  
@@ -4861,18 +4913,27 @@ sub extractObject
 
 sub analysera
 {  my $infil = shift;
+   my $from  = shift || 1;
+   my $to    = shift || 0;
    my ($i, $res, @underObjekt, @sidObj, $vektor,
        $strPos, $sidor, $filId, $Root, $del1, $del2, $utrad);
 
+   my $extraherade = 0;
    my $sidAcc = 0;
    @skapa     = ();
   
-   if (exists $processed{$infil})
-   {  %old = %{$processed{$infil}};
-   }
-   else
-   {  %old = ();
-   }
+   $behandlad{$infil}->{old} = {}
+        unless (defined $behandlad{$infil}->{old});
+   $processed{$infil}->{oldObject} = {} 
+        unless (defined $processed{$infil}->{oldObject});   
+   $processed{$infil}->{unZipped} = {} 
+        unless (defined $processed{$infil}->{unZipped});
+   *old       = $behandlad{$infil}->{old};
+   *oldObject = $processed{$infil}->{oldObject};
+   *unZipped  = $processed{$infil}->{unZipped};
+
+   $root      = (exists $processed{$infil}->{root}) 
+                    ? $processed{$infil}->{root} : 0;
              
    undef $AcroForm;
    undef $Annots;
@@ -4892,11 +4953,8 @@ sub analysera
    open (INFIL, "<$infil") || errLog("Couldn't open $infil,aborting.  $!");
    binmode INFIL;
   
-   if ($lastFile ne $infil)
-   {  %oldObject = ();
-      %unZipped  = ();
-      $root      = xRefs($stati[7], $infil);
-      $lastFile  = $infil;
+   if (! $root)
+   {  $root      = xRefs($stati[7], $infil);
    }   
    #############
    # Hitta root
@@ -4906,7 +4964,7 @@ sub analysera
    my $bytes;
    my $objektet = getObject($root);
    
-   if (! $interActive)
+   if ((! $interActive) && ( ! $to) && ($from == 1))
    {  if ($objektet =~ m'/AcroForm(\s+\d+\s{1,2}\d+\s{1,2}R)'so)
       {  $AcroForm = $1;
       }      
@@ -4944,8 +5002,7 @@ sub analysera
           }
        }
        $taInterAkt = 1;   # Flagga att ta med interaktiva funktioner
-   }
- 
+   } 
    
    #
    # Hitta pages
@@ -4986,7 +5043,21 @@ sub analysera
           }
           else
           {  $sidAcc++;
-             sidAnalys($j, $objektet);
+             if ($sidAcc >= $from)
+             {   if ($to)
+                 {  if ($sidAcc <= $to)
+                    {  sidAnalys($j, $objektet);
+                       $extraherade++;
+                    }
+                    else
+                    {  $sidAcc = $sidor;
+                    }
+                 }
+                 else
+                 {  sidAnalys($j, $objektet);
+                    $extraherade++;
+                 }
+              }
           }
       }
       else
@@ -5033,8 +5104,9 @@ sub analysera
       }
   }
   close INFIL;
-  %{$processed{$infil}} = %old;
-  return $sidor;
+  $processed{$infil}->{root}         = $root;
+
+  return $extraherade;
 }
 
 sub sidAnalys
@@ -5184,7 +5256,7 @@ sub behandlaNames
               if (exists $script{$key})   # företräde för nya funktioner !
               {   delete $script{$key};    # gammalt script m samma namn plockas bort
               } 
-              my @fall = ($initScript{$key} =~ m'([\w\d\_\$]+)\s*\([\w\s\,\d\.]*\)'ogs);
+              my @fall = ($initScript{$key} =~ m'([\w\d\_\$]+)\s*\('ogs);
               for (@fall)
               {   if (($_ ne $key) && (exists $nyaFunk{$_}))
                   {  $initScript{$_} = $nyaFunk{$_}; 
@@ -5397,10 +5469,16 @@ sub defLadda
 {  my $code = "function Ladda()\r{\r";
    for (keys %fields)
    {  my $val = $fields{$_};
-      $val =~ s/\'/\\\\\'/gos;
-      $val =~ s/\r/\\\\r/gos;
-      $val =~ s/\n/\\\\n/gos; 
-      $code .= "if (this.getField('$_')) this.getField('$_').value = '$val';\r";
+      if ($val =~ m'\s*js\s*\:(.+)'oi) 
+      {   $val = $1;
+          $code .= "if (this.getField('$_')) this.getField('$_').value = $val;\r";
+      }
+      else
+      {  $val =~ s/\'/\\\\\'/gos;
+         $val =~ s/\r/\\\\r/gos;
+         $val =~ s/\n/\\\\n/gos;
+         $code .= "if (this.getField('$_')) this.getField('$_').value = '$val';\r";
+      }
    }  
    $code .= " 1;}\r";
    
