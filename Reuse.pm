@@ -16,7 +16,7 @@ use autouse 'Compress::Zlib' => qw(compress($)
 use autouse 'Data::Dumper'   => qw(Dumper);
 use AutoLoader qw(AUTOLOAD);
 
-our $VERSION = '0.22';
+our $VERSION = '0.23';
 our @ISA     = qw(Exporter);
 our @EXPORT  = qw(prFile
                   prPage
@@ -893,7 +893,7 @@ sub prEnd
     if (! defined $objekt[$objNr])
     {  $objNr--;                   # reserverat sidobjektnr utnyttjades aldrig
     }
-
+    
     my $utrad = "1 0 obj\n<</Type/Catalog/Pages $slutNod 0 R";
     if (defined $NamesSaved)
     {  $utrad .= "\/Names $NamesSaved 0 R\n"; 
@@ -1144,10 +1144,13 @@ create big lists, which are compact at the same time.
 =item JavaScript
 
 You can attach JavaScripts to your PDF-files, and "initiate" them (Acrobat 5.0, 
-Acrobat Reader 5.1 or higher).
+Acrobat Reader 5.0.5 or higher).
+
 You can have libraries of JavaScripts. No cutting or pasting, and those who include 
 the scripts in documents only need to know how to initiate them. (Of course those
-who write the scripts have to know Acrobat JavaScript well.) 
+who write the scripts have to know Acrobat JavaScript well.)
+
+See Remarks about Javascript
 
 =item PDF-operators
 
@@ -1163,6 +1166,26 @@ or transfer.
 =back
 
 PDF::Reuse::Tutorial might show you best what you can do with this module.
+
+=head2 Remarks about Javascript
+
+If your user has Acrobat Reader 5.0.5 or higher, he/she should be able to use the 
+functions with JavaScript. The Reader should have the option "Allow File Open
+Actions and Launching File Attachments" checked under "Preferences".
+
+If he/she uses Acrobat there is a complication. Everything should work fine as long
+as new files are not read via the web. Acrobat has a plug in, "webpdf.api", which
+converts documents, also PDF-documents, when they are fetched over the net.
+That is probably a good idea in some cases, but B<it changes the documents, and 
+there is a great risk that JavaScripts are lost>.
+
+(In cases of real emergency, you can disable the plug in simply by removing it
+from the directory Plug_ins under Acrobat, put it in a safe place, and start Acrobat.
+And put it back before you need it next time.) 
+
+Anyway, almost every computer has the Reader somewhere, and if it is not of the
+right version, it can be downloaded. So with a little effort, it should be possible
+to use also the functions with JavaScrips on most computers.
 
 =head1 FUNCTIONS
 
@@ -1194,9 +1217,7 @@ lost.
 
 Look at any program in this documentation for an example.
 
-
 =head1 Optional Functions
-
 
 =head2 prAdd		- add "low level" instructions 
 
@@ -1262,8 +1283,6 @@ Each hash can have these components:
         color   3 numbers, RGB-colors e.g. '0.5 0.5 1' for light blue
         style   0, 1, 2, or 3. 0 = Normal, 1 = Italic, 2 = Bold, 3 = Bold Italic
 
-
-
 Creating bookmarks for a document:
 
     use PDF::Reuse;
@@ -1288,11 +1307,12 @@ Creating bookmarks for a document:
     prEnd();
 
 
-B<N.B. Traditionally bookmarks have mainly been used for navigation within a document,
+Traditionally bookmarks have mainly been used for navigation within a document,
 but they can be used for many more things. You can e.g. use them to navigate within
 your data. You can let your users go to external links also, so they can "drill down"
-to other documents.> 
+to other documents.
 
+B<See "Remarks about Javascript">
 
 =head2 prCompress		- compress/zip added streams 
 
@@ -1412,7 +1432,7 @@ This function redefines a page to an "XObject" (the graphic parts), then the
 page can be reused in a much better way. Unfortunately there is an important 
 limitation here. "XObjects" can only have single streams. If the page consists
 of many streams, you should concatenate them first. Adobe Acrobat can do that.
-(If it is an important file, take a copy of it first.Sometimes the procedure fails.)
+(If it is an important file, take a copy of it first. Sometimes the procedure fails.)
 You open the file with Acrobat and choose the "Touch Up" tool and change anything
 graphic in the page. You could e.g. remove 1 space and put it back. Then you
 save the file.
@@ -1432,6 +1452,7 @@ save the file.
 (You can use the output from the example in prJs() as input to this example.
 Remember to save that file before closing it.)
 
+B<See Remarks about Javascript>
 
 =head2 prExtract		- extract an object group 
 
@@ -1476,6 +1497,8 @@ to the field. Then you have to put 'js:' first in "$value" like this:
 If you refer to a JavaScript function, it has to be included with prJs first. (The
 JavaScript interpreter will simply not be aware of old functions in the PDF-document,
 when the initiation is done.)
+
+B<The function prField uses JavaScript, so see "Remarks about Javascript">
 
 =head2 prFont		- set current font 
 
@@ -1632,7 +1655,6 @@ B<xsize> multiply horizontally by this value (cannot be combined with "adjust")
 
 B<ysize> multiply vertically by $ysize (cannot be combined with "adjust")
 
-
 This function redefines a page to an "XObject" (the graphic parts), then the 
 page can be reused and referred to as a unit. Unfortunately there is an important 
 limitation here. "XObjects" can only have single streams. If the page consists
@@ -1769,7 +1791,6 @@ Alternative 2) You put your parameters in this order
 
 	prImage ( $pdfFile, [$page, $imageNo, $effect, $adjust, $x, $y, $degree,
             $size, $xsize, $ysize] )
-    
 
 Returns in scalar context B<$internalName> As a list B<$internalName, $width, 
 $height> 
@@ -1869,6 +1890,8 @@ JavaScript is run at initiation and that JavaScript contains a return-statement,
 a bug occurs. The JavaScript interpreter "exits" instead of returning, the execution
 of the JavaScript might finish to early. This is a bug in Acrobat/Reader 5.
 
+B<The function prInit uses JavaScript, so see "Remarks about Javascript">
+
 =head2 prInitVars		- initiate global variables and internal tables 
 
    prInitVars(1)
@@ -1945,6 +1968,8 @@ In that case the file has to consist only of JavaScript functions.
    prInit('nameAddress(0, 100, 700);');
    prEnd();
 
+
+B<See "Remarks about Javascript">
 
 =head2 prLog		- add a string to the log 
 
@@ -2031,7 +2056,6 @@ See "Using the template" in the tutorial for an example.
 
 (To encrypt your documents: use the batch utility within Acrobat)
 
- 
 
 =head1 INTERNAL OR DEPRECATED FUNCTIONS
 
@@ -2125,6 +2149,11 @@ restored.
 
 =head1 SEE ALSO
 
+   PDF::Reuse::Tutorial
+   PDF::Reuse::Barcode
+   PDF::Reuse::Scramble
+   PDF::Reuse::SimpleChart
+
 To program with PDF-operators, look at "The PDF-reference Manual" which probably
 is possible to download from http://partners.adobe.com/asn/developer/acrosdk/docs.html
 Look especially at chapter 4 and 5, Graphics and Text, and the Operator summary.
@@ -2141,10 +2170,6 @@ it from http://www.mayura.com. It is free. I have used it to produce the graphic
 OO-code in the tutorial. It produces postscript which the Acrobat Distiller (you get it together with Acrobat)
 or Ghostscript can convert to PDF.(The commercial product, Mayura Draw 4.01 or something 
 higher can produce PDF-files straight away)
-
-If you want to produce bar codes, you need
-
-   PDF::Reuse::Barcode
 
 If you want to import jpeg-images, you might need
 
