@@ -14,7 +14,7 @@ use autouse 'Compress::Zlib' => qw(compress($));
 use AutoLoader qw(AUTOLOAD);
 
 
-our $VERSION = '0.05';
+our $VERSION = '0.06';
 our @ISA     = qw(Exporter);
 our @EXPORT  = qw(prFile
                   prPage
@@ -362,7 +362,11 @@ sub prPage
 sub prText
 { my $xPos = shift;
   my $yPos = shift;
-  my $TxT  = shift || '';
+  my $TxT  = shift;
+
+  if (! defined $TxT)
+  {  $TxT = '';
+  } 
 
   if (($xPos !~ m'[\d\.]+'o) || (! defined $xPos))
   { errLog("Illegal x-position for text: $xPos");
@@ -1128,8 +1132,7 @@ Prints a barfont pattern at the current page.
 Returns $internalName for the font.
 $x and $y are coordinates in pixels and $string should consist of  zeroes and ones. 
 You can use e.g. GD::Barcode or one module in that group to calculate the barcode
-pattern. prBar "translates" the pattern to white and black bars. (Look at "See
-Also", if you get problems with GD)
+pattern. prBar "translates" the pattern to white and black bars.
 
    use PDF::Reuse;
    use GD::Barcode::Code39;
@@ -1793,17 +1796,6 @@ If you want to produce bar codes, you might need some of these modules
    GD::Barcode::UPCA
    GD::Barcode::UPCE
 
-(Latest upgrade of GD didn't work on my computer, so I had to change this
-line in most of the modules:
-
-    use GD;
-
-to
-
-    use autouse 'GD' => qw(gdSmallFont);
-
-Then it was possible to use the modules.)
-
 If you want to import jpeg-images, you might need
 
    Image::Info
@@ -2452,7 +2444,7 @@ sub createCharProcs()
     $objNr++;
     $objekt[$objNr]  = $pos;
     my $tomtObj = $objNr;
-    my $str = "\n75 0 d0\n7 0 67 2000 re\n1.0 g\nf\n";
+    my $str = "\n75 0 d0\n6 0 69 2000 re\n1.0 g\nf\n";
     my $strLength = length($str);
     $obj = "$objNr 0 obj\n<< /Length $strLength >>\nstream" .
            $str . "\nendstream\nendobj\n";
@@ -2465,7 +2457,7 @@ sub createCharProcs()
     $objNr++;
     $objekt[$objNr]  = $pos;
     my $streckObj = $objNr;
-    $str = "\n75 0 d0\n0 0 67 2000 re\n0.0 g\nf\n";
+    $str = "\n75 0 d0\n4 0 71 2000 re\n0.0 g\nf\n";
     $strLength = length($str);
     $obj = "$objNr 0 obj\n<< /Length $strLength >>\nstream" .
            $str . "\nendstream\nendobj\n";
@@ -2478,7 +2470,7 @@ sub createCharProcs()
     $objNr++;
     $objekt[$objNr]  = $pos;
     my $lStreckObj = $objNr;
-    $str = "\n75 0 d0\n0 -250 67 2250 re\n0.0 g\nf\n";
+    $str = "\n75 0 d0\n4 -250 71 2250 re\n0.0 g\nf\n";
     $strLength = length($str);
     $obj = "$objNr 0 obj\n<< /Length $strLength >>\nstream" .
            $str . "\nendstream\nendobj\n";

@@ -17,5 +17,9 @@ Revision history for Perl extension PDF::Reuse.
      Tried to make the module backwards compatible with Perl 5.6.1
      Changed use 5.008 to use 5.006, constants are individually defined and
      AutoLoader is used instead of SelfLoader.
+0.06 Mon Jun 2
+     Corrected a bug in prText: when you tried to print '0' it was transformed
+     to ''. Minor changes to the barcode font. Changed documentation referring
+     to GD::Barcode and the modules in that group
      
      
