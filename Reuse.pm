@@ -1,6 +1,6 @@
 package PDF::Reuse;
 
-use 5.008;
+use 5.006;
 use strict;
 use warnings;
 
@@ -10,10 +10,11 @@ use autouse 'Carp' => qw(carp
                          cluck
                          croak);
 
-use autouse 'Compress::Zlib' => qw(compress);
-use SelfLoader;
+use autouse 'Compress::Zlib' => qw(compress($));
+use AutoLoader qw(AUTOLOAD);
 
-our $VERSION = '0.03';
+
+our $VERSION = '0.05';
 our @ISA     = qw(Exporter);
 our @EXPORT  = qw(prFile
                   prPage
@@ -47,18 +48,18 @@ our @EXPORT  = qw(prFile
                   prCompress
                   prMbox);
 
-our ($utfil, $inrad, $utrad, $slutNod, $formRes, $formCont,
+our ($utfil, $utrad, $slutNod, $formRes, $formCont,
     $formRot, $del1, $del2, $obj, $nr,
     $vektor, $parent, $resOffset, $resLength, $infil, $seq, $imSeq, $rform, $robj,
     $page, $Annots, $Names, $AARoot, $AAPage, $sidObjNr,  # $aktNod, 
     $AcroForm, $interActive, $NamesSaved, $AARootSaved, $AAPageSaved, $root,
     $AcroFormSaved, $AnnotsSaved, $id, $ldir, $checkId, 
-    $filnamn, $interAktivSida, $taInterAkt, $ua, $type, $runfil, $checkCs,
+    $filnamn, $interAktivSida, $taInterAkt, $type, $runfil, $checkCs,
     $confuseObj, $compress,$pos, $formNr, $imageNr, $fontNr, $objNr, $xPos, $yPos,
     $defGState, $gSNr, $pattern, $shading, $colorSpace);
  
-our (@kids, @counts, @size, @formBox, @objekt, @parents, @aktuellFont, @sid, @skapa,
-    @funcs, @jsfiler, @inits);
+our (@kids, @counts, @size, @formBox, @objekt, @parents, @aktuellFont, @skapa,
+    @jsfiler, @inits);
  
 our ( %old, %oldObject, %resurser, %form, %image, %objRef, %nyaFunk, %fontSource, 
      %sidFont, %sidXObject, %sidExtGState, %font, %intAct, %fields, %script, 
@@ -73,69 +74,68 @@ our $log    = '';
 #########################
 # Konstanter för objekt
 #########################
-use constant 
-{  oPOS       => 0,
-   oSIZE      => 1,
-   oSTREAMP   => 2,
-   oKIDS      => 3,
-   oFORM      => 4,  
-   oIMAGE     => 5,  
-   oIMAGENR   => 6,  
-   oWIDTH     => 7,  
-   oHEIGHT    => 8,  
-   oTYPE      => 9,
-   oNAME      => 10,
+
+use constant   oPOS       => 0;
+use constant   oSIZE      => 1;
+use constant   oSTREAMP   => 2;
+use constant   oKIDS      => 3;
+use constant   oFORM      => 4;  
+use constant   oIMAGE     => 5;  
+use constant   oIMAGENR   => 6;  
+use constant   oWIDTH     => 7;  
+use constant   oHEIGHT    => 8;  
+use constant   oTYPE      => 9;
+use constant   oNAME      => 10;
 
 ###################################
 # Konstanter för formulär
 ###################################
 
-   fOBJ       => 0,
-   fRESOFFSET => 1,   
-   fRESLENGTH => 2,   
-   fBBOX      => 3,
-   fNAMN      => 4,
-   fSTAMP     => 5,
-   fIMAGES    => 6,
-   fMAIN      => 7,
-   fKIDS      => 8,
-   fNOKIDS    => 9,
-   fID        => 10,
-   fVALID     => 11,
+use constant   fOBJ       => 0;
+use constant   fRESOFFSET => 1;   
+use constant   fRESLENGTH => 2;   
+use constant   fBBOX      => 3;
+use constant   fNAMN      => 4;
+use constant   fSTAMP     => 5;
+use constant   fIMAGES    => 6;
+use constant   fMAIN      => 7;
+use constant   fKIDS      => 8;
+use constant   fNOKIDS    => 9;
+use constant   fID        => 10;
+use constant   fVALID     => 11;
 
 ####################################
 # Konstanter för images
 ####################################
 
-   imNAMN      => 0,   
-   imWIDTH     => 1,   
-   imHEIGHT    => 2, 
-   imXPOS      => 3,
-   imYPOS      => 4,
-   imXSCALE    => 5,
-   imYSCALE    => 6,
-   imIMAGENO   => 7,
+use constant   imNAMN      => 0;   
+use constant   imWIDTH     => 1;   
+use constant   imHEIGHT    => 2; 
+use constant   imXPOS      => 3;
+use constant   imYPOS      => 4;
+use constant   imXSCALE    => 5;
+use constant   imYSCALE    => 6;
+use constant   imIMAGENO   => 7;
 
 #####################################
 # Konstanter för interaktiva objekt
 #####################################
 
-   iNAMES     => 1,
-   iACROFORM  => 2,
-   iAAROOT    => 3,
-   iANNOTS    => 4,
-   iSTARTSIDA => 5,
-   iAAPAGE    => 6,
+use constant   iNAMES     => 1;
+use constant   iACROFORM  => 2;
+use constant   iAAROOT    => 3;
+use constant   iANNOTS    => 4;
+use constant   iSTARTSIDA => 5;
+use constant   iAAPAGE    => 6;
 
 #####################################
 # Konstanter för fonter
 #####################################
    
-   foREFOBJ     => 0,
-   foINTNAMN    => 1,
-   foEXTNAMN    => 2,
-   foORIGINALNR => 3,
-};
+use constant   foREFOBJ     => 0;
+use constant   foINTNAMN    => 1;
+use constant   foEXTNAMN    => 2;
+use constant   foORIGINALNR => 3;
 
 our $xScale   = 1;
 our $yScale   = 1;
@@ -1028,10 +1028,848 @@ sub definieraId
       return ($str, $str);
    }     
 }
-
 1;
 
-__DATA__
+__END__
+
+=head1 NAME
+
+PDF::Reuse - Reuse and mass produce PDF documents with this module   
+
+=head1 SYNOPSIS
+
+   use PDF::Reuse;                     
+   prFile('myFile.pdf');                   # Mandatory function
+   prText(100, 500, 'Hello World !');
+   prEnd();                                # Mandatory function to flush buffers
+
+=head1 DESCRIPTION
+
+This module is probably not beautiful looking and it is not object-oriented,
+but it should be fast and should give your programs capacity to produce many
+pages per second and very big files if necessary.
+
+=over 2
+
+=item Templates
+
+Use your favorite program, probably a commercial visual tool, to produce single 
+PDF-files to be used as templates, and then use this module to B<mass produce> files 
+from them. 
+
+(If you want small PDF-files or want special graphics, you can use this module also,
+but visual tools are often most practical.)
+
+=item Lists
+
+The module uses "XObjects" extensively. This is a format that makes it possible
+create big lists, which are compact at the same time.
+
+=item JavaScript
+
+You can attach JavaScripts to your PDF-files, and "initiate" them (Acrobat 5.0, 
+or Acrobat Reader 5.1). These features are experimental.
+You can have libraries of JavaScripts. No cutting or pasting, and those who include 
+the scripts in documents only need to know how to initiate them. (Of course those
+who write the scripts have to know Acrobat JavaScript well.) 
+
+=item PDF-operators
+
+The module gives you a good possibility to program at a "low level" with the basic
+graphic operators of PDF, if that is what you want to do. You can build your
+own libraries of low level routines, with PDF-directives "controlled" by Perl.
+
+=item Archive-format
+
+If you want, you get your new documents logged in a format suitable for archiving 
+or transfer.
+
+=back
+
+B<PDF::Reuse::Tutorial shows you best what you can do with this module.
+Look at it first, before proceeding to the functions !>
+
+=head1 FUNCTIONS
+
+All functions which are successful return specified values or 1.
+
+Parameters within [] are optional
+
+The module doesn't make any attempt to import anything from encrypted files.
+
+=head2 Mandatory Functions
+
+=over 4
+
+=item prFile ( $fileName )
+
+File to create. If another file is current when this function is called, the first
+one is written and closed. Only one file is processed at a single moment.
+
+Look at any program in this documentation for an example.
+
+=item prEnd ()
+
+When the processing is going to end, the buffers of the B<last> file has to be written to the disc.
+If this function is not called, the page structure, xref part and so on will be 
+lost.
+
+Look at any program in this documentation for an example.
+
+=back
+
+=head2 Optional Functions
+
+=over 2
+
+=item prBar ([$x, $y, $string])
+
+Prints a barfont pattern at the current page.
+Returns $internalName for the font.
+$x and $y are coordinates in pixels and $string should consist of  zeroes and ones. 
+You can use e.g. GD::Barcode or one module in that group to calculate the barcode
+pattern. prBar "translates" the pattern to white and black bars. (Look at "See
+Also", if you get problems with GD)
+
+   use PDF::Reuse;
+   use GD::Barcode::Code39;
+   use strict;
+  
+   prFile('myFile.pdf');
+
+   my $oGdB = GD::Barcode::Code39->new('JOHNDOE');
+   my $sPtn = $oGdB->barcode();
+   prBar(100, 600, $sPtn);
+
+   prEnd();
+
+Internally the module uses a font for the bars, so you might want to change the font size before calling
+this function. In that case, use prFontSize() .
+If you you call this function without arguments it defines the barfont but does
+not write anything to the current page.
+
+Often you want more than just the bars, look in the tutorial at example ex23_pl,
+'Barcodes'.
+
+=item prCid ( $timeStamp )
+
+An internal function. Don't bother about it. It is used in automatic
+routines when you want to restore a document. It gives modification time of
+the next PDF-file or JavaScript.
+
+See "Restoring a document from the log" in the tutorial for more about the
+time stamp
+
+=item prCompress ( [1] )
+
+'1' here is a directive to compress the streams of the current file.
+Streams shorter than 101 bytes are not compressed. The streams are compressed in
+memory, so probably there is a limit of how big the streams can be.
+prCompress(); is a directive not to compress. This is default.
+
+See e.g. "Starting to reuse" in the tutorial for an example.
+
+=item prAdd ( $string )
+
+With this command you can add whatever you want to the current content stream.
+No syntactical checks are made, but if you use an internal name, the module tries
+to add the resource of the "name object" to the "Resources" of current page.
+"Name objects" always begin with a '/'. 
+
+(In this documentation I often use talk about an "internal name". It denotes a 
+"name object". When PDF::Reuse creates these objects, it assigns Ft1, Ft2, Ft3 ...
+for fonts, Im1, Im2, Im3 for images, Fo1 .. for forms, Cs1 .. for Color spaces,
+Pt1 .. for patterns, Sh1 .. for shading directories, Gs0 .. for graphic state
+parameter dictionaries. These names are kept until the program finishes, 
+and my ambition is also to keep the resources available in internal tables.)
+
+This is a simple and very powerful function. You should study the examples and 
+the "PDF-reference manual", if you want to use it.(When this text is written,
+a possible link to download it is: 
+http://partners.adobe.com/asn/developer/acrosdk/docs.html) 
+
+This function is intended to give you detail control at a low level.
+
+   use PDF::Reuse;
+   use strict;
+   
+   prFile('myFile.pdf');
+   my $string = "150 600 100 50 re\n";  # a rectangle 
+   $string   .= "0 0 1 rg\n";           # blue (to fill)
+   $string   .= "b\n";                  # fill and stroke
+   prAdd($string);                       
+   prEnd(); 
+
+=item prDoc ( $documentName )
+
+Adds a document to the document you are creating. If it is the first interactive
+component ( prDoc() or prDocForm() ) the interactive functions are kept and also merged
+with JavaScripts you have added (if any).
+
+   use PDF::Reuse;
+   use strict;
+   
+   prFile('myFile.pdf');                  # file to make
+   prJs('customerResponse.js');           # include a JavaScript file
+   prInit('nameAddress(12, 150, 600);');  # init a JavaScript function
+   prForm('best.pdf');                    # page 1 from best.pdf
+   prPage();                              # page break
+   prDoc('long.pdf');                     # a document with 11 pages
+   prPage();                              # page break
+   prForm('best.pdf');                    # page 1 from best.pdf
+   prText(150, 700, 'Customer Data');     # a line of text
+   prEnd(); 
+
+
+=item prDocDir ( $directoryName )
+
+Sets directory for produced documents
+
+   use PDF::Reuse;
+   use strict;
+
+   prDocDir('C:/temp/doc');
+   prFile('myFile.pdf');         # writes to C:\temp\doc\myFile.pdf
+   prForm('myFile.pdf');         # page 1 from ..\myFile.pdf
+   prText(200, 600, 'New text');
+   prEnd();
+
+
+=item prExtract ( $pdfFile, $pageNo, $oldInternalName )
+
+B<oldInternalName>, a "name"-object.  This is the internal name you find in the original file.
+Returns a B<$newInternalName> which can be used for "low level" programming. You
+have better look at graphObj_pl and modules it has generated for this distribution,
+e.g. thermometer.pm, to see how this function can be used.  
+
+When you call this function, the necessary objects will be copied to your new
+PDF-file, and you can refer to them with the new name you receive.
+
+=item prFont ( [$fontName] )
+
+Sets current font.
+
+$fontName is an "external" font name. 
+In list context returns B<$internalName, $externalName, $oldInternalName,
+$oldExternalname> The first two variabels refer to the current font, the two later
+to the font before the change. In scalar context returns b<$internalName>
+
+If a font wasn't found, Helvetica will be set.
+These names are always recognized:
+B<Times-Roman, Times-Bold, Times-Italic, Times-BoldItalic, Courier, Courier-Bold,
+Courier-Oblique, Courier-BoldOblique, Helvetica, Helvetica-Bold, Helvetica-Oblique,
+Helvetica-BoldOblique> or abbreviated 
+B<TR, TB, TI, TBI, C, CB, CO, CBO, H, HB, HO, HBO>. 
+(B<Symbol and ZapfDingbats> or abbreviated B<S, Z>, also belong to the predefined
+fonts, but there is something with them that I really don't understand. You should
+print them first on a page, and then use other fonts, otherwise they are not displayed.)
+
+You can also use a font name from an included page. It has to be spelled exactly as
+it is done there. Look in the file and search for "/BaseFont" and the font
+name. But take care, e.g. the PDFMaker which converts to PDF from different 
+Microsoft programs, only defines exactly those letters you can see on the page. You
+can use the font, but perhaps some of your letters were not defined. 
+
+In the distribution there is an utility program, 'reuseComponent_pl', which displays
+included fonts in a PDF-file and prints some letters. Run it to see the name of the
+font and if it is worth extracting.
+
+   use PDF::Reuse;
+   use strict;
+   prFile('myFile.pdf');
+
+   ####### One possibility #########
+
+   prFont('Times-Roman');     # Just setting a font
+   prFontSize(20);
+   prText(180, 790, "This is a heading");
+
+   ####### Another possibility #######
+
+   my $font = prFont('C');    # Setting a font, getting an  
+                              # internal name
+   prAdd("BT /$font 12 Tf 25 760 Td (This is some other text)Tj ET"); 
+   prEnd();
+
+The example above shows you two ways of setting and using a font. One simple, and
+one complicated with a possibility to detail control. 
+
+
+
+=item prFontSize ( [$size] )
+
+Sets current font size, returns B<$actualSize, $fontSizeBeforetheChange>.
+prFontSize() sets the size to 12 pixels, which is default. 
+
+=item prForm ( $pdfFile, [$page, $adjust, $effect, $tolerant] )
+
+Reuses a page from a PDF-file.
+
+Alternatively you can call this function with a hash like this
+
+    my $internalName = prForm ( {file     => 'myFile.pdf',
+                                 page     => 2,
+                                 adjust   => 1,
+                                 effect   => 'load',
+                                 tolerant => 1 } );
+
+if B<$page> is excluded 1 is assumed. B<$adjust>, could be 1 or nothing. If it is 
+given, the program tries to adjust the page to the current media box (paper size).
+This parameter is useless, unless the next parameter is 'print'.
+
+The next two parameters are a little unusual and you can manage most often without them.
+
+B<$effect> can have 3 values: B<'print'>, which is default, loads the page in an internal
+table, adds it to the document and prints it to the current page. B<'add'>, loads the
+page and adds it to the document. (Now you can "manually" manage the way you want to
+print it to different pages within the document.) B<'load'> just loads the page in an 
+internal table. (You can now take I<parts> of a page like fonts and objects and manage
+them, without adding all the page to the document.)B<tolerant> can be nothing or
+something. If it is undefined, you will get an error if your program tries to load
+a page which the system cannot really handle, if it e.g. consists of many streams.
+If it is set to something, you have to test the first return value $internalName to
+know if the function was successful. Look at the program 'reuseComponent_pl' for an 
+example of usage.
+
+In list context returns B<$intName, @BoundingBox, $numberOfImages>
+In scalar context returns B<$internalName> of the form.
+
+This function redefines a page to an "XObject" (the graphic parts), then the 
+page can be reused and referred to as a unit. Unfortunately there is an important 
+limitation here. "XObjects" can only have single streams. If the page consists
+of many streams, you should concatenate them first. Adobe Acrobat can do that.
+(If it is an important file, take a copy of it first. Sometimes the procedure fails.)
+You open the file with Acrobat and choose the "Touch Up" tool and change anything
+graphic in the page. You could e.g. remove 1 space and put it back. Then you
+save the file. You could alternatively save the file as Postscript and redistill it with the
+distiller or with Ghost script, but this is a little more risky. You might loose fonts
+or something else. An other alternative could be to use prDoc() , but then you get all
+the document, and you can only change the appearance of the page with the help of
+JavaScript.
+
+   use PDF::Reuse;
+   use strict;
+
+   prFile('myFile.pdf');
+   prForm('best.pdf');    # Takes page No 1
+   prText(75, 790, 'Dear Mr Gates');
+   # ...
+   prPage();
+   prMbox(0, 0, 900, 960);
+   my @vec = prForm(   { file => 'EUSA.pdf',
+                         adjust => 1 } );
+   prPage();
+   prMbox();
+   prText(35, 760, 'This is the final page');
+
+   # More text ..
+
+   #################################################################
+   # We want to put a miniature of EUSA.pdf, 35 pixels from the left
+   # 85 pixels up, and in the format 250 X 200 pixels
+   #################################################################
+
+   my $xScale = 250 / ($vec[3] - $vec[1]);
+   my $yScale = 200 / ($vec[4] - $vec[2]);
+   if ($xScale < $yScale)
+   {  $yScale = $xScale;
+   }
+   else
+   {  $xScale = $yScale;
+   }
+
+   my $string = "q\n";
+   $string   .= "$xScale 0 0 $yScale 35 85 cm\n"; 
+   $string   .= "/$vec[0] Do\n";
+   $string   .= "Q\n";
+   prAdd($string);
+   prEnd();
+
+The first prForm(), in the code, is a simple and "normal" way of using the
+the function. The second time it is used, the size of the imported page is
+changed. It is adjusted to the media box which is current at that moment.
+Also data about the form is taken, so you can control more in detail how it
+will be displayed. Study the tutorial and the "PDF Reference Manual" for
+more information about the "low level" manipulations at the end of the code.
+
+=item prGetLogBuffer ()
+
+returns a B<$buffer> of the log of the current page. (It could be used
+e.g. to calculate a MD5-digest of what has been registered that far, instead of 
+accumulating the single values) A log has to be active, see prLogDir() below
+
+Look at "Using the template" and "Restoring a document from the log" in the
+tutorial for examples of usage.
+
+=item prGraphState ( $string )
+
+Defines a graphic state parameter dictionary in the current file. It is a "low level"
+function. Returns B<$internalName>. The B<$string> has to be a complete dictionary
+with initial "<<" and terminating ">>". No syntactical checks are made.
+Perhaps you will never have to use this function.
+
+   use PDF::Reuse;
+   use strict;
+
+   prFile('myFile.pdf');
+
+   ###################################################
+   # Draw a triangle with Gs0 (automatically defined)
+   ###################################################
+
+   my $str = "q\n";
+   $str   .= "/Gs0 gs\n";
+   $str   .= "150 700 m\n";
+   $str   .= "225 800 l\n";
+   $str   .= "300 700 l\n";
+   $str   .= "150 700 l\n";
+   $str   .= "S\n";
+   $str   .= "Q\n";
+   prAdd($str);
+
+   ########################################################
+   # Define a new graph. state param. dic. and draw a new
+   # triangle further down 
+   ########################################################
+
+   $str = '<</Type/ExtGState/SA false/SM 0.02/TR2 /Default'
+                      . '/LW 15/LJ 1/ML 1>>';
+   my $gState = prGraphState($str);
+   $str  = "q\n";
+   $str .= "/$gState gs\n";
+   $str .= "150 500 m\n";
+   $str .= "225 600 l\n";
+   $str .= "300 500 l\n";
+   $str .= "150 500 l\n";
+   $str .= "S\n";
+   $str .= "Q\n";
+   prAdd($str);
+   
+   prEnd();
+
+
+=item prId ( $string )
+
+An internal function. Don't bother about it. It is used e.g. when a document is
+restored and an id has to be set, not calculated.
+
+=item prIdType ( $string )
+
+An internal function. Avoid using it. B<$string> could be "Rep" for replace or
+"None" to avoid calculating an id.
+
+Normally you don't use this function. Then an id is calculated with the help of
+Digest::MD5::md5_hex and some data from the run.
+
+=item prImage ( $pdfFile [, $pageNo, $imageNo, $effect] )
+
+Reuses an image.
+
+Alternatively you can call this function with the parameters in a hash
+like this
+
+    prImage( { file    => 'myFile.pdf',
+               pageNo  => 10,
+               imageNo => 2,
+               effect  => 'print' } );
+
+Returns in scalar context B<$internalName> As a list B<$internalName, $width, $height> 
+
+Assumes that $pageNo and $imageNo are 1, if not specified. If $effect is given and
+anything else then 'print', the image will be defined in the document,
+but not shown at this moment.
+
+   use PDF::Reuse;
+   use strict;
+
+   prFile('myFile.pdf');
+   prMoveTo(10, 400);
+   prScale(0.9, 0.8);
+   my @vec = prImage('best.pdf');
+   prText(35, 760, 'This is some text');
+   # ...
+
+   prPage();
+   my @vec2 = prImage( { file    => 'destiny.pdf',
+                         pageNo  => 1,
+                         imageNo => 1,
+                         effect  => 'load' } );
+   prText(25, 760, "There shouldn't be any image on this page");
+   prPage();
+   ########################################################
+   #  Now we make both images so that they could fit into
+   #  a box 300 X 300 pixels, and they are displayed
+   ########################################################
+
+   my $xScale = 300 / $vec[1];
+   my $yScale = 300 / $vec[2];
+   if ($xScale < $yScale)
+   {  $yScale = $xScale;
+   }
+   else
+   {  $xScale = $yScale;
+   }
+   $xScale *= $vec[1];
+   $yScale *= $vec[2];
+   prText(25, 800, 'This is the first image :');
+   my $string = "q\n";
+   $string   .= "$xScale 0 0 $yScale 25 450 cm\n";
+   $string   .= "/$vec[0] Do\n";
+   $string   .= "Q\n";
+   prAdd($string);
+   $xScale = 300 / $vec2[1];
+   $yScale = 300 / $vec2[2];
+   if ($xScale < $yScale)
+   {  $yScale = $xScale;
+   }
+   else
+   {  $xScale = $yScale;
+   }
+   $xScale *= $vec2[1];
+   $yScale *= $vec2[2];
+   prText(25, 400, 'This is the second image :');
+   $string  = "q\n";   
+   $string .= "$xScale 0 0 $yScale 25 25 cm\n";
+   $string .= "/$vec2[0] Do\n";
+   $string .= "Q\n";
+   prAdd($string);
+   prEnd();
+
+
+On the first page an image is displayed in a simple way. While the second page
+is processed, prImage(), loads an image, but it is not shown here. On the 3:rd
+page, the two images are scaled and shown with "low level" directives. 
+
+In the distribution there is an utility program, 'reuseComponent_pl', which displays
+included images in a PDF-file and their "names".
+
+=item prJpeg ( $imageFile, $width, $height )
+
+B<$imageFile> contains 1 single jpeg-image. B<$width> and B<$height>
+also have to be specified. Returns the B<$internalName>
+
+   use PDF::Reuse;
+   use Image::Info qw(image_info dim);
+   use strict;
+
+   my $file = 'myImage.jpg';
+   my $info = image_info($file);
+   my ($width, $height) = dim($info);    # Get the dimensions
+
+   prFile('myFile.pdf');
+   my $intName = prJpeg("$file",         # Define the image 
+                         $width,         # in the document
+                         $height);
+
+   my $str = "q\n";
+   $str   .= "$width 0 0 $height 10 10 cm\n";
+   $str   .= "/$intName Do\n";
+   $str   .= "Q\n";
+   prAdd($str);
+   prEnd();
+
+This is a little like an extra or reserve routine to add images to the document.
+The most simple way is to use prImage()  
+
+=item prLog ( $string )
+
+Adds whatever you want to the current log (a referenceNo, a commentary, a tag ?)
+A log has to be active see prLogDir()
+
+Look at "Using the template" and "Restoring the document from the log" in
+the tutorial for an example.
+
+=item prLogDir ( $directory )
+
+Sets a directory for the logs and activates the logging. 
+A little log file is created for each PDF-file. Normally it should be much, much
+more compact then the PDF-file, and it should be possible to restore or verify 
+a document with the help of it. (Of course you could compress or store the logs in a 
+database to save even more space.) 
+
+   use PDF::Reuse;
+   use strict;
+
+   prDocDir('C:/temp/doc');
+   prLogDir('C:/run');
+
+   prFile('myFile.pdf');
+   prForm('best.pdf');
+   prText(25, 790, 'Dear Mr. Anders Persson');
+   # ...
+   prEnd();
+
+In this example a log file with the name 'myFile.pdf.dat' is created in the
+directory 'C:\run'. If that directory doesn't exist, the system tries to create it.
+(But, just as mkdir does, it only creates the last level in a directory tree.)
+
+=item prMbox ( [$lowerLeftX, $lowerLeftY, $upperRightX, $upperRightY] )
+
+Defines the format (MediaBox) of the current page. 
+
+If the function or the parameters are missing, they are set to 0, 0, 595, 842 pixels respectively.   
+
+See prForm() for an example.
+
+=item prMoveTo ( $x, $y )
+
+Defines positions where to put e.g. next image
+
+See prImage() for an example.
+
+=item prPage ( [$noLog] )
+
+Inserts a page break
+
+Don't use the optional parameter, it is only used internally, not to clutter the log,
+when automatic page breaks are made.
+
+See prForm() for an example. 
+
+=item prScale ( [$xSize, $ySize] )
+
+Each of $xSize and $ySize are set to 1 if missing. You can use this function to
+scale an image before showing it.
+
+See prImage() for an example.
+
+=item prText ( $x, $y, $string )
+
+Puts B<$string> at position B<$x, $y>
+Current font and font size is used. (If you use prAdd() before this function,
+many other things could also influence the text.)
+
+See prImage() for an example.  
+
+=item prTouchUp ( [1] );
+
+By default and after you have issued prTouchUp(1), you can change the document
+with the TouchUp tool from within Acrobat.
+If you want to switch off this possibility, you use prTouchUp() without any 
+parameter.  Then the user shouldn't be able to change anything graphic by mistake.
+He has to do something premeditated and perhaps with a little effort.
+He could still save it as Postscript and redistill, or he could remove or add single pages. 
+(Here is a strong reason why the log files, and perhaps also check sums, are needed.
+It would be very difficult to forge a document unless the forger also has access to your
+computer and knows how the check sums are calculated.)
+
+(Avoid perhaps to switch off the TouchUp tool for your templates, because it creates an
+extra level within the PDF-documents, but use it for your final documents)
+
+See "Using the template" in the tutorial for an example. 
+
+(To encrypt your documents: use the batch utility within Acrobat)
+
+=item prVers ( $versionNo )
+
+An internal routine to check version of this module in case a document has to be
+restored. 
+
+=back  
+
+=head2 Experimental "Interactive" Functions 
+
+All these functions are connected to JavaScripts and "Acroforms". They should work for Acrobat 5.0 and
+Acrobat Reader 5.1. You can use them B<now>, but I can't guarantee anything. Don't put them in
+in a document which will be used in a far future.
+Anyway this is a more rational way to handle JavaScripts, than cutting and pasting. This is the way it should work.
+
+=over 3 
+
+=item prDocForm ( $pdfFile, [$page, $adjust, $effect] )
+
+Reuses an interactive page
+
+Alternatively you can call this function with a hash like this
+
+    my $intName = prDocForm ( {file   => 'myFile.pdf',
+                               page   => 2,
+                               adjust => 1,
+                               effect => 'print' } );
+
+
+If B<$pageNo> is missing, 1 is assumed. 
+B<$adjust>, could be 1 or nothing. If it is given the program tries to
+adjust the page to the current media box (paper size). Usually you shouldn't adjust
+an interactive page. The graphic and interactive components are independent of 
+each other and it is a great risk that any coordination is lost. 
+B<$effect> can have 3 values: B<'print'>, which is default, loads the page in an internal
+table, adds it to the document and prints it to the current page. B<'add'>, loads the
+page and adds it to the document. (Now you can "manually" manage the way you want to
+print it to different pages within the document.) B<'load'> just loads the page in an 
+internal table. (You can now take I<parts> of a page like fonts and objects and manage
+them, without adding all the page to the document.)
+
+In list context returns B<$internalName, @BoundingBox[1..4], $numberOfImages>.
+In scalar context returns B<$internalName> of the graphic form.
+
+This function redefines a page to an "XObject" (the graphic parts), then the 
+page can be reused in a much better way. Unfortunately there is an important 
+limitation here. "XObjects" can only have single streams. If the page consists
+of many streams, you should concatenate them first. Adobe Acrobat can do that.
+(If it is an important file, take a copy of it first.Sometimes the procedure fails.)
+You open the file with Acrobat and choose the "Touch Up" tool and change anything
+graphic in the page. You could e.g. remove 1 space and put it back. Then you
+save the file.
+
+   use PDF::Reuse;
+   use strict;
+
+   prDocDir('C:/temp/doc');
+   prFile('newForm.pdf');
+   prField('Mr/Ms', 'Mr');
+   prField('First_Name', 'Lars');
+   prDocForm('myFile.pdf');
+   prFontSize(24);
+   prText(75, 790, 'This text is added');
+   prEnd();
+
+(You can use the output from the example in prJs() as input to this example.
+Remember to save that file before closing it.)
+
+=item prField ( $fieldName, $value )
+
+B<$fieldName> is an interactive field in the document you are creating.
+It has to be spelled exactly the same way here as it spelled in the document.
+B<$value> is what you want to assigned to the field
+
+See prDocForm() for an example
+
+=item prInit ( $string )
+
+B<$string> can be any JavaScript code, but you can only refer to functions included
+with prJs. The JavaScript interpreter will not know other functions in the document.
+Often you can add new things, but you can't remove or change interactive fields,
+because the interpreter hasn't come that far, when initiation is done.
+
+See prJs() for an example
+
+=item prJs ( $fileName )
+
+To add JavaScript to your new document. B<$fileName> has to consist only of
+JavaScript functions: function a (..){ ... } function b (..) { ...} and so on
+
+   use PDF::Reuse;
+   use strict;
+
+   prFile('myFile.pdf');
+   prJs('customerResponse.js');
+   prInit('nameAddress(0, 100, 700);');
+   prEnd();
+
+=back
+
+=head1 SEE ALSO
+
+To program with PDF-operators, look at "The PDF-reference Manual" which probably
+is possible to download from http://partners.adobe.com/asn/developer/acrosdk/docs.html
+Look especially at chapter 4 and 5, Graphics and Text, and the Operator summary.
+
+Technical Note # 5186 contains the "Acrobat JavaScript Object Specification". I 
+downloaded it from http://partners.adobe.com/asn/developer/technotes/acrobatpdf.html
+
+If you are serious about producing PDF-files, you probably need Adobe Acrobat sooner
+or later. It has a price tag. Other good programs are GhostScript and GSview. 
+I got them via http://www.cs.wisc.edu/~ghost/index.html  Sometimes they can replace Acrobat.
+A nice little detail is e.g. that GSview shows the x- and y-coordinats better then Acrobat. If you need to convert HTML-files to PDF, HTMLDOC is a possible tool. Download it from
+http://www.easysw.com . A simple tool for vector graphics is Mayura Draw 2.04, download
+it from http://www.mayura.com. It is free. I have used it to produce the graphic
+OO-code in the tutorial. It produces postscript which the Acrobat Distiller (you get it together with Acrobat)
+or Ghostscript can convert to PDF.(The commercial product, Mayura Draw 4.01 or something 
+higher can produce PDF-files straight away)
+
+If you want to produce bar codes, you might need some of these modules
+
+   GD::Barcode
+   GD::Barcode::Code39
+   GD::Barcode::COOP2of5
+   GD::Barcode::EAN13
+   GD::Barcode::EAN8
+   GD::Barcode::IATA2of5
+   GD::Barcode::Industrial2of5
+   GD::Barcode::ITF
+   GD::Barcode::Matrix2of5
+   GD::Barcode::NW7
+   GD::Barcode::UPCA
+   GD::Barcode::UPCE
+
+(Latest upgrade of GD didn't work on my computer, so I had to change this
+line in most of the modules:
+
+    use GD;
+
+to
+
+    use autouse 'GD' => qw(gdSmallFont);
+
+Then it was possible to use the modules.)
+
+If you want to import jpeg-images, you might need
+
+   Image::Info
+
+To get definitions for e.g. colors, take them from
+
+   PDF::API2::Util 
+
+=head1 LIMITATIONS
+
+Outlines, metadata, info and many other features of the PDF-format have not been
+implemented in this module. 
+
+Many things can be added afterwards, after creating the files. If you e.g. need
+files to be encrypted, you can use a standard batch routine within Adobe Acrobat.   
+
+=head1 TODO
+
+I have been experimenting a little with a helper application for Netscape or
+Internet Explorer and it is quite obvious that you could get very good performance
+and high reliability if you transferred the logs and constructed the documents at
+the target computer, instead of the transferring formatted documents.
+The reasons are:
+
+The size of a log is usually only a fraction of the formatted document. The logs
+keep a time stamp for all source files, so you could have a simple cashing. It is
+possible to put a time stamp on the log file and then you get a hierarchal structure.
+When the system reads a log file it could quickly find out which source files are
+missing. If it encounters the URL and time stamp of cashed log file, that would be
+sufficient.  It would not be necessary to get it over the net.
+You would minimize the number of conversations and you would also increase the
+possibilities to complete a task even if the connections are bad.    
+
+The cash could function as a secondary library for forms and JavaScripts.
+When you work with HTML you are usually interested in the most recent version of
+of a component. With PDF the emphasis is usually more on exactness, and PDF-documents
+tend to be more stable. This strengthens the motive for a functioning cash.
+
+(Also I think you could skip some holy rules from HTML-processing. E.g. if an 
+international body has forms and JavaScripts for booking a hotel room, any 
+affiliated hotel should have the right to use the common files, so they could be
+used via the cash regardless of if you are booking a room in Agadir or Shanghai.
+That would create libraries and rational reuse of code. I think security and
+legal problems would be possible to handle.)
+
+At the present time PDF cannot compete with HTML, but if you used the log files
+and a simple cash, PDF would be just superior for repeated tasks.
+
+=head1 AUTHOR
+
+Lars Lundberg elkelund@worldonline.se
+
+=head1 COPYRIGHT
+
+Copyright (C) 2003 Lars Lundberg, Solidez HB. All rights reserved.
+This program is free software; you can redistribute it and/or
+modify it under the same terms as Perl itself.
+
+=head1 DISCLAIMER
+
+You get this module free as it is, but NOTHING IS GUARANTEED to work, whatever 
+implicitly or explicitly stated in this document, and everything you do, 
+you do AT YOUR OWN RISK - I will not take responsibility 
+for any damage, loss of money and/or health that may arise from the use of this module!
+
+=cut
 
 ####################
 # Behandla en bild
@@ -1645,7 +2483,7 @@ sub createCharProcs()
     $obj = "$objNr 0 obj\n<< /Length $strLength >>\nstream" .
            $str . "\nendstream\nendobj\n";
     $pos += syswrite UTFIL, $obj;
-
+   
     #####################################################
     # Objektet för "CharProcs" skapas
     #####################################################
@@ -3955,834 +4793,3 @@ sub errLog
     print STDERR Carp::shortmess("An error occured \n");
     croak "$endMess\n";      
 }
-1;
-__END__
-
-=head1 NAME
-
-PDF::Reuse - Reuse and mass produce PDF documents with this module   
-
-=head1 SYNOPSIS
-
-   use PDF::Reuse;                     
-   prFile('myFile.pdf');                   # Mandatory function
-   prText(100, 500, 'Hello World !');
-   prEnd();                                # Mandatory function to flush buffers
-
-=head1 DESCRIPTION
-
-This module is probably not beautiful looking and it is not object-oriented,
-but it should be fast and should give your programs capacity to produce many
-pages per second and very big files if necessary.
-
-=over 2
-
-=item Templates
-
-Use your favorite program, probably a commercial visual tool, to produce single 
-PDF-files to be used as templates, and then use this module to B<mass produce> files 
-from them. 
-
-(If you want small PDF-files or want special graphics, you can use this module also,
-but visual tools are often most practical.)
-
-=item Lists
-
-The module uses "XObjects" extensively. This is a format that makes it possible
-create big lists, which are compact at the same time.
-
-=item JavaScript
-
-You can attach JavaScripts to your PDF-files, and "initiate" them (Acrobat 5.0, 
-or Acrobat Reader 5.1). These features are experimental.
-You can have libraries of JavaScripts. No cutting or pasting, and those who include 
-the scripts in documents only need to know how to initiate them. (Of course those
-who write the scripts have to know Acrobat JavaScript well.) 
-
-=item PDF-operators
-
-The module gives you a good possibility to program at a "low level" with the basic
-graphic operators of PDF, if that is what you want to do. You can build your
-own libraries of low level routines, with PDF-directives "controlled" by Perl.
-
-=item Archive-format
-
-If you want, you get your new documents logged in a format suitable for archiving 
-or transfer.
-
-=back
-
-B<PDF::Reuse::Tutorial shows you best what you can do with this module.
-Look at it first, before proceeding to the functions !>
-
-=head1 FUNCTIONS
-
-All functions which are successful return specified values or 1.
-
-Parameters within [] are optional
-
-The module doesn't make any attempt to import anything from encrypted files.
-
-=head2 Mandatory Functions
-
-=over 4
-
-=item prFile ( $fileName )
-
-File to create. If another file is current when this function is called, the first
-one is written and closed. Only one file is processed at a single moment.
-
-Look at any program in this documentation for an example.
-
-=item prEnd ()
-
-When the processing is going to end, the buffers of the B<last> file has to be written to the disc.
-If this function is not called, the page structure, xref part and so on will be 
-lost.
-
-Look at any program in this documentation for an example.
-
-=back
-
-=head2 Optional Functions
-
-=over 2
-
-=item prBar ([$x, $y, $string])
-
-Prints a barfont pattern at the current page.
-Returns $internalName for the font.
-$x and $y are coordinates in pixels and $string should consist of  zeroes and ones. 
-You can use e.g. GD::Barcode or one module in that group to calculate the barcode
-pattern. prBar "translates" the pattern to white and black bars.
-
-   use PDF::Reuse;
-   use GD::Barcode::Code39;
-   use strict;
-  
-   prFile('myFile.pdf');
-
-   my $oGdB = GD::Barcode::Code39->new('JOHNDOE');
-   my $sPtn = $oGdB->barcode();
-   prBar(100, 600, $sPtn);
-
-   prEnd();
-
-Internally the module uses a font for the bars, so you might want to change the font size before calling
-this function. In that case, use prFontSize() .
-If you you call this function without arguments it defines the barfont but does
-not write anything to the current page.
-
-Often you want more than just the bars, look in the tutorial at example ex23_pl,
-'Barcodes'.
-
-=item prCid ( $timeStamp )
-
-An internal function. Don't bother about it. It is used in automatic
-routines when you want to restore a document. It gives modification time of
-the next PDF-file or JavaScript.
-
-See "Restoring a document from the log" in the tutorial for more about the
-time stamp
-
-=item prCompress ( [1] )
-
-'1' here is a directive to compress the streams of the current file.
-Streams shorter than 101 bytes are not compressed. The streams are compressed in
-memory, so probably there is a limit of how big the streams can be.
-prCompress(); is a directive not to compress. This is default.
-
-See e.g. "Starting to reuse" in the tutorial for an example.
-
-=item prAdd ( $string )
-
-With this command you can add whatever you want to the current content stream.
-No syntactical checks are made, but if you use an internal name, the module tries
-to add the resource of the "name object" to the "Resources" of current page.
-"Name objects" always begin with a '/'. 
-
-(In this documentation I often use talk about an "internal name". It denotes a 
-"name object". When PDF::Reuse creates these objects, it assigns Ft1, Ft2, Ft3 ...
-for fonts, Im1, Im2, Im3 for images, Fo1 .. for forms, Cs1 .. for Color spaces,
-Pt1 .. for patterns, Sh1 .. for shading directories, Gs0 .. for graphic state
-parameter dictionaries. These names are kept until the program finishes, 
-and my ambition is also to keep the resources available in internal tables.)
-
-This is a simple and very powerful function. You should study the examples and 
-the "PDF-reference manual", if you want to use it.(When this text is written,
-a possible link to download it is: 
-http://partners.adobe.com/asn/developer/acrosdk/docs.html) 
-
-This function is intended to give you detail control at a low level.
-
-   use PDF::Reuse;
-   use strict;
-   
-   prFile('myFile.pdf');
-   my $string = "150 600 100 50 re\n";  # a rectangle 
-   $string   .= "0 0 1 rg\n";           # blue (to fill)
-   $string   .= "b\n";                  # fill and stroke
-   prAdd($string);                       
-   prEnd(); 
-
-=item prDoc ( $documentName )
-
-Adds a document to the document you are creating. If it is the first interactive
-component ( prDoc() or prDocForm() ) the interactive functions are kept and also merged
-with JavaScripts you have added (if any).
-
-   use PDF::Reuse;
-   use strict;
-   
-   prFile('myFile.pdf');                  # file to make
-   prJs('customerResponse.js');           # include a JavaScript file
-   prInit('nameAddress(12, 150, 600);');  # init a JavaScript function
-   prForm('best.pdf');                    # page 1 from best.pdf
-   prPage();                              # page break
-   prDoc('long.pdf');                     # a document with 11 pages
-   prPage();                              # page break
-   prForm('best.pdf');                    # page 1 from best.pdf
-   prText(150, 700, 'Customer Data');     # a line of text
-   prEnd(); 
-
-
-=item prDocDir ( $directoryName )
-
-Sets directory for produced documents
-
-   use PDF::Reuse;
-   use strict;
-
-   prDocDir('C:/temp/doc');
-   prFile('myFile.pdf');         # writes to C:\temp\doc\myFile.pdf
-   prForm('myFile.pdf');         # page 1 from ..\myFile.pdf
-   prText(200, 600, 'New text');
-   prEnd();
-
-
-=item prExtract ( $pdfFile, $pageNo, $oldInternalName )
-
-B<oldInternalName>, a "name"-object.  This is the internal name you find in the original file.
-Returns a B<$newInternalName> which can be used for "low level" programming. You
-have better look at graphObj_pl and modules it has generated for this distribution,
-e.g. thermometer.pm, to see how this function can be used.  
-
-When you call this function, the necessary objects will be copied to your new
-PDF-file, and you can refer to them with the new name you receive.
-
-=item prFont ( [$fontName] )
-
-Sets current font.
-
-$fontName is an "external" font name. 
-In list context returns B<$internalName, $externalName, $oldInternalName,
-$oldExternalname> The first two variabels refer to the current font, the two later
-to the font before the change. In scalar context returns b<$internalName>
-
-If a font wasn't found, Helvetica will be set.
-These names are always recognized:
-B<Times-Roman, Times-Bold, Times-Italic, Times-BoldItalic, Courier, Courier-Bold,
-Courier-Oblique, Courier-BoldOblique, Helvetica, Helvetica-Bold, Helvetica-Oblique,
-Helvetica-BoldOblique> or abbreviated 
-B<TR, TB, TI, TBI, C, CB, CO, CBO, H, HB, HO, HBO>. 
-(B<Symbol and ZapfDingbats> or abbreviated B<S, Z>, also belong to the predefined
-fonts, but there is something with them that I really don't understand. You should
-print them first on a page, and then use other fonts, otherwise they are not displayed.)
-
-You can also use a font name from an included page. It has to be spelled exactly as
-it is done there. Look in the file and search for "/BaseFont" and the font
-name. But take care, e.g. the PDFMaker which converts to PDF from different 
-Microsoft programs, only defines exactly those letters you can see on the page. You
-can use the font, but perhaps some of your letters were not defined. 
-
-In the distribution there is an utility program, 'reuseComponent_pl', which displays
-included fonts in a PDF-file and prints some letters. Run it to see the name of the
-font and if it is worth extracting.
-
-   use PDF::Reuse;
-   use strict;
-   prFile('myFile.pdf');
-
-   ####### One possibility #########
-
-   prFont('Times-Roman');     # Just setting a font
-   prFontSize(20);
-   prText(180, 790, "This is a heading");
-
-   ####### Another possibility #######
-
-   my $font = prFont('C');    # Setting a font, getting an  
-                              # internal name
-   prAdd("BT /$font 12 Tf 25 760 Td (This is some other text)Tj ET"); 
-   prEnd();
-
-The example above shows you two ways of setting and using a font. One simple, and
-one complicated with a possibility to detail control. 
-
-
-
-=item prFontSize ( [$size] )
-
-Sets current font size, returns B<$actualSize, $fontSizeBeforetheChange>.
-prFontSize() sets the size to 12 pixels, which is default. 
-
-=item prForm ( $pdfFile, [$page, $adjust, $effect, $tolerant] )
-
-Reuses a page from a PDF-file.
-
-Alternatively you can call this function with a hash like this
-
-    my $internalName = prForm ( {file     => 'myFile.pdf',
-                                 page     => 2,
-                                 adjust   => 1,
-                                 effect   => 'load',
-                                 tolerant => 1 } );
-
-if B<$page> is excluded 1 is assumed. B<$adjust>, could be 1 or nothing. If it is 
-given, the program tries to adjust the page to the current media box (paper size).
-This parameter is useless, unless the next parameter is 'print'.
-
-The next two parameters are a little unusual and you can manage most often without them.
-
-B<$effect> can have 3 values: B<'print'>, which is default, loads the page in an internal
-table, adds it to the document and prints it to the current page. B<'add'>, loads the
-page and adds it to the document. (Now you can "manually" manage the way you want to
-print it to different pages within the document.) B<'load'> just loads the page in an 
-internal table. (You can now take I<parts> of a page like fonts and objects and manage
-them, without adding all the page to the document.)B<tolerant> can be nothing or
-something. If it is undefined, you will get an error if your program tries to load
-a page which the system cannot really handle, if it e.g. consists of many streams.
-If it is set to something, you have to test the first return value $internalName to
-know if the function was successful. Look at the program 'reuseComponent_pl' for an 
-example of usage.
-
-In list context returns B<$intName, @BoundingBox, $numberOfImages>
-In scalar context returns B<$internalName> of the form.
-
-This function redefines a page to an "XObject" (the graphic parts), then the 
-page can be reused and referred to as a unit. Unfortunately there is an important 
-limitation here. "XObjects" can only have single streams. If the page consists
-of many streams, you should concatenate them first. Adobe Acrobat can do that.
-(If it is an important file, take a copy of it first. Sometimes the procedure fails.)
-You open the file with Acrobat and choose the "Touch Up" tool and change anything
-graphic in the page. You could e.g. remove 1 space and put it back. Then you
-save the file. You could alternatively save the file as Postscript and redistill it with the
-distiller or with Ghost script, but this is a little more risky. You might loose fonts
-or something else. An other alternative could be to use prDoc() , but then you get all
-the document, and you can only change the appearance of the page with the help of
-JavaScript.
-
-   use PDF::Reuse;
-   use strict;
-
-   prFile('myFile.pdf');
-   prForm('best.pdf');    # Takes page No 1
-   prText(75, 790, 'Dear Mr Gates');
-   # ...
-   prPage();
-   prMbox(0, 0, 900, 960);
-   my @vec = prForm(   { file => 'EUSA.pdf',
-                         adjust => 1 } );
-   prPage();
-   prMbox();
-   prText(35, 760, 'This is the final page');
-
-   # More text ..
-
-   #################################################################
-   # We want to put a miniature of EUSA.pdf, 35 pixels from the left
-   # 85 pixels up, and in the format 250 X 200 pixels
-   #################################################################
-
-   my $xScale = 250 / ($vec[3] - $vec[1]);
-   my $yScale = 200 / ($vec[4] - $vec[2]);
-   if ($xScale < $yScale)
-   {  $yScale = $xScale;
-   }
-   else
-   {  $xScale = $yScale;
-   }
-
-   my $string = "q\n";
-   $string   .= "$xScale 0 0 $yScale 35 85 cm\n"; 
-   $string   .= "/$vec[0] Do\n";
-   $string   .= "Q\n";
-   prAdd($string);
-   prEnd();
-
-The first prForm(), in the code, is a simple and "normal" way of using the
-the function. The second time it is used, the size of the imported page is
-changed. It is adjusted to the media box which is current at that moment.
-Also data about the form is taken, so you can control more in detail how it
-will be displayed. Study the tutorial and the "PDF Reference Manual" for
-more information about the "low level" manipulations at the end of the code.
-
-=item prGetLogBuffer ()
-
-returns a B<$buffer> of the log of the current page. (It could be used
-e.g. to calculate a MD5-digest of what has been registered that far, instead of 
-accumulating the single values) A log has to be active, see prLogDir() below
-
-Look at "Using the template" and "Restoring a document from the log" in the
-tutorial for examples of usage.
-
-=item prGraphState ( $string )
-
-Defines a graphic state parameter dictionary in the current file. It is a "low level"
-function. Returns B<$internalName>. The B<$string> has to be a complete dictionary
-with initial "<<" and terminating ">>". No syntactical checks are made.
-Perhaps you will never have to use this function.
-
-   use PDF::Reuse;
-   use strict;
-
-   prFile('myFile.pdf');
-
-   ###################################################
-   # Draw a triangle with Gs0 (automatically defined)
-   ###################################################
-
-   my $str = "q\n";
-   $str   .= "/Gs0 gs\n";
-   $str   .= "150 700 m\n";
-   $str   .= "225 800 l\n";
-   $str   .= "300 700 l\n";
-   $str   .= "150 700 l\n";
-   $str   .= "S\n";
-   $str   .= "Q\n";
-   prAdd($str);
-
-   ########################################################
-   # Define a new graph. state param. dic. and draw a new
-   # triangle further down 
-   ########################################################
-
-   $str = '<</Type/ExtGState/SA false/SM 0.02/TR2 /Default'
-                      . '/LW 15/LJ 1/ML 1>>';
-   my $gState = prGraphState($str);
-   $str  = "q\n";
-   $str .= "/$gState gs\n";
-   $str .= "150 500 m\n";
-   $str .= "225 600 l\n";
-   $str .= "300 500 l\n";
-   $str .= "150 500 l\n";
-   $str .= "S\n";
-   $str .= "Q\n";
-   prAdd($str);
-   
-   prEnd();
-
-
-=item prId ( $string )
-
-An internal function. Don't bother about it. It is used e.g. when a document is
-restored and an id has to be set, not calculated.
-
-=item prIdType ( $string )
-
-An internal function. Avoid using it. B<$string> could be "Rep" for replace or
-"None" to avoid calculating an id.
-
-Normally you don't use this function. Then an id is calculated with the help of
-Digest::MD5::md5_hex and some data from the run.
-
-=item prImage ( $pdfFile [, $pageNo, $imageNo, $effect] )
-
-Reuses an image.
-
-Alternatively you can call this function with the parameters in a hash
-like this
-
-    prImage( { file    => 'myFile.pdf',
-               pageNo  => 10,
-               imageNo => 2,
-               effect  => 'print' } );
-
-Returns in scalar context B<$internalName> As a list B<$internalName, $width, $height> 
-
-Assumes that $pageNo and $imageNo are 1, if not specified. If $effect is given and
-anything else then 'print', the image will be defined in the document,
-but not shown at this moment.
-
-   use PDF::Reuse;
-   use strict;
-
-   prFile('myFile.pdf');
-   prMoveTo(10, 400);
-   prScale(0.9, 0.8);
-   my @vec = prImage('best.pdf');
-   prText(35, 760, 'This is some text');
-   # ...
-
-   prPage();
-   my @vec2 = prImage( { file    => 'destiny.pdf',
-                         pageNo  => 1,
-                         imageNo => 1,
-                         effect  => 'load' } );
-   prText(25, 760, "There shouldn't be any image on this page");
-   prPage();
-   ########################################################
-   #  Now we make both images so that they could fit into
-   #  a box 300 X 300 pixels, and they are displayed
-   ########################################################
-
-   my $xScale = 300 / $vec[1];
-   my $yScale = 300 / $vec[2];
-   if ($xScale < $yScale)
-   {  $yScale = $xScale;
-   }
-   else
-   {  $xScale = $yScale;
-   }
-   $xScale *= $vec[1];
-   $yScale *= $vec[2];
-   prText(25, 800, 'This is the first image :');
-   my $string = "q\n";
-   $string   .= "$xScale 0 0 $yScale 25 450 cm\n";
-   $string   .= "/$vec[0] Do\n";
-   $string   .= "Q\n";
-   prAdd($string);
-   $xScale = 300 / $vec2[1];
-   $yScale = 300 / $vec2[2];
-   if ($xScale < $yScale)
-   {  $yScale = $xScale;
-   }
-   else
-   {  $xScale = $yScale;
-   }
-   $xScale *= $vec2[1];
-   $yScale *= $vec2[2];
-   prText(25, 400, 'This is the second image :');
-   $string  = "q\n";   
-   $string .= "$xScale 0 0 $yScale 25 25 cm\n";
-   $string .= "/$vec2[0] Do\n";
-   $string .= "Q\n";
-   prAdd($string);
-   prEnd();
-
-
-On the first page an image is displayed in a simple way. While the second page
-is processed, prImage(), loads an image, but it is not shown here. On the 3:rd
-page, the two images are scaled and shown with "low level" directives. 
-
-In the distribution there is an utility program, 'reuseComponent_pl', which displays
-included images in a PDF-file and their "names".
-
-=item prJpeg ( $imageFile, $width, $height )
-
-B<$imageFile> contains 1 single jpeg-image. B<$width> and B<$height>
-also have to be specified. Returns the B<$internalName>
-
-   use PDF::Reuse;
-   use Image::Info qw(image_info dim);
-   use strict;
-
-   my $file = 'myImage.jpg';
-   my $info = image_info($file);
-   my ($width, $height) = dim($info);    # Get the dimensions
-
-   prFile('myFile.pdf');
-   my $intName = prJpeg("$file",         # Define the image 
-                         $width,         # in the document
-                         $height);
-
-   my $str = "q\n";
-   $str   .= "$width 0 0 $height 10 10 cm\n";
-   $str   .= "/$intName Do\n";
-   $str   .= "Q\n";
-   prAdd($str);
-   prEnd();
-
-This is a little like an extra or reserve routine to add images to the document.
-The most simple way is to use prImage()  
-
-=item prLog ( $string )
-
-Adds whatever you want to the current log (a referenceNo, a commentary, a tag ?)
-A log has to be active see prLogDir()
-
-Look at "Using the template" and "Restoring the document from the log" in
-the tutorial for an example.
-
-=item prLogDir ( $directory )
-
-Sets a directory for the logs and activates the logging. 
-A little log file is created for each PDF-file. Normally it should be much, much
-more compact then the PDF-file, and it should be possible to restore or verify 
-a document with the help of it. (Of course you could compress or store the logs in a 
-database to save even more space.) 
-
-   use PDF::Reuse;
-   use strict;
-
-   prDocDir('C:/temp/doc');
-   prLogDir('C:/run');
-
-   prFile('myFile.pdf');
-   prForm('best.pdf');
-   prText(25, 790, 'Dear Mr. Anders Persson');
-   # ...
-   prEnd();
-
-In this example a log file with the name 'myFile.pdf.dat' is created in the
-directory 'C:\run'. If that directory doesn't exist, the system tries to create it.
-(But, just as mkdir does, it only creates the last level in a directory tree.)
-
-=item prMbox ( [$lowerLeftX, $lowerLeftY, $upperRightX, $upperRightY] )
-
-Defines the format (MediaBox) of the current page. 
-
-If the function or the parameters are missing, they are set to 0, 0, 595, 842 pixels respectively.   
-
-See prForm() for an example.
-
-=item prMoveTo ( $x, $y )
-
-Defines positions where to put e.g. next image
-
-See prImage() for an example.
-
-=item prPage ( [$noLog] )
-
-Inserts a page break
-
-Don't use the optional parameter, it is only used internally, not to clutter the log,
-when automatic page breaks are made.
-
-See prForm() for an example. 
-
-=item prScale ( [$xSize, $ySize] )
-
-Each of $xSize and $ySize are set to 1 if missing. You can use this function to
-scale an image before showing it.
-
-See prImage() for an example.
-
-=item prText ( $x, $y, $string )
-
-Puts B<$string> at position B<$x, $y>
-Current font and font size is used. (If you use prAdd() before this function,
-many other things could also influence the text.)
-
-See prImage() for an example.  
-
-=item prTouchUp ( [1] );
-
-By default and after you have issued prTouchUp(1), you can change the document
-with the TouchUp tool from within Acrobat.
-If you want to switch off this possibility, you use prTouchUp() without any 
-parameter.  Then the user shouldn't be able to change anything graphic by mistake.
-He has to do something premeditated and perhaps with a little effort.
-He could still save it as Postscript and redistill, or he could remove or add single pages. 
-(Here is a strong reason why the log files, and perhaps also check sums, are needed.
-It would be very difficult to forge a document unless the forger also has access to your
-computer and knows how the check sums are calculated.)
-
-(Avoid perhaps to switch off the TouchUp tool for your templates, because it creates an
-extra level within the PDF-documents, but use it for your final documents)
-
-See "Using the template" in the tutorial for an example. 
-
-(To encrypt your documents: use the batch utility within Acrobat)
-
-=item prVers ( $versionNo )
-
-An internal routine to check version of this module in case a document has to be
-restored. 
-
-=back  
-
-=head2 Experimental "Interactive" Functions 
-
-All these functions are connected to JavaScripts and "Acroforms". They should work for Acrobat 5.0 and
-Acrobat Reader 5.1. You can use them B<now>, but I can't guarantee anything. Don't put them in
-in a document which will be used in a far future.
-Anyway this is a more rational way to handle JavaScripts, than cutting and pasting. This is the way it should work.
-
-=over 3 
-
-=item prDocForm ( $pdfFile, [$page, $adjust, $effect] )
-
-Reuses an interactive page
-
-Alternatively you can call this function with a hash like this
-
-    my $intName = prDocForm ( {file   => 'myFile.pdf',
-                               page   => 2,
-                               adjust => 1,
-                               effect => 'print' } );
-
-
-If B<$pageNo> is missing, 1 is assumed. 
-B<$adjust>, could be 1 or nothing. If it is given the program tries to
-adjust the page to the current media box (paper size). Usually you shouldn't adjust
-an interactive page. The graphic and interactive components are independent of 
-each other and it is a great risk that any coordination is lost. 
-B<$effect> can have 3 values: B<'print'>, which is default, loads the page in an internal
-table, adds it to the document and prints it to the current page. B<'add'>, loads the
-page and adds it to the document. (Now you can "manually" manage the way you want to
-print it to different pages within the document.) B<'load'> just loads the page in an 
-internal table. (You can now take I<parts> of a page like fonts and objects and manage
-them, without adding all the page to the document.)
-
-In list context returns B<$internalName, @BoundingBox[1..4], $numberOfImages>.
-In scalar context returns B<$internalName> of the graphic form.
-
-This function redefines a page to an "XObject" (the graphic parts), then the 
-page can be reused in a much better way. Unfortunately there is an important 
-limitation here. "XObjects" can only have single streams. If the page consists
-of many streams, you should concatenate them first. Adobe Acrobat can do that.
-(If it is an important file, take a copy of it first.Sometimes the procedure fails.)
-You open the file with Acrobat and choose the "Touch Up" tool and change anything
-graphic in the page. You could e.g. remove 1 space and put it back. Then you
-save the file.
-
-   use PDF::Reuse;
-   use strict;
-
-   prDocDir('C:/temp/doc');
-   prFile('newForm.pdf');
-   prField('Mr/Ms', 'Mr');
-   prField('First_Name', 'Lars');
-   prDocForm('myFile.pdf');
-   prFontSize(24);
-   prText(75, 790, 'This text is added');
-   prEnd();
-
-(You can use the output from the example in prJs() as input to this example.
-Remember to save that file before closing it.)
-
-=item prField ( $fieldName, $value )
-
-B<$fieldName> is an interactive field in the document you are creating.
-It has to be spelled exactly the same way here as it spelled in the document.
-B<$value> is what you want to assigned to the field
-
-See prDocForm() for an example
-
-=item prInit ( $string )
-
-B<$string> can be any JavaScript code, but you can only refer to functions included
-with prJs. The JavaScript interpreter will not know other functions in the document.
-Often you can add new things, but you can't remove or change interactive fields,
-because the interpreter hasn't come that far, when initiation is done.
-
-See prJs() for an example
-
-=item prJs ( $fileName )
-
-To add JavaScript to your new document. B<$fileName> has to consist only of
-JavaScript functions: function a (..){ ... } function b (..) { ...} and so on
-
-   use PDF::Reuse;
-   use strict;
-
-   prFile('myFile.pdf');
-   prJs('customerResponse.js');
-   prInit('nameAddress(0, 100, 700);');
-   prEnd();
-
-=back
-
-=head1 SEE ALSO
-
-To program with PDF-operators, look at "The PDF-reference Manual" which probably
-is possible to download from http://partners.adobe.com/asn/developer/acrosdk/docs.html
-Look especially at chapter 4 and 5, Graphics and Text, and the Operator summary.
-
-Technical Note # 5186 contains the "Acrobat JavaScript Object Specification". I 
-downloaded it from http://partners.adobe.com/asn/developer/technotes/acrobatpdf.html
-
-If you are serious about producing PDF-files, you probably need Adobe Acrobat sooner
-or later. It has a price tag. Other good programs are GhostScript and GSview. 
-I got them via http://www.cs.wisc.edu/~ghost/index.html  Sometimes they can replace Acrobat.
-A nice little detail is e.g. that GSview shows the x- and y-coordinats better then Acrobat. If you need to convert HTML-files to PDF, HTMLDOC is a possible tool. Download it from
-http://www.easysw.com . A simple tool for vector graphics is Mayura Draw 2.04, download
-it from http://www.mayura.com. It is free. I have used it to produce the graphic
-OO-code in the tutorial. It produces postscript which the Acrobat Distiller (you get it together with Acrobat)
-or Ghostscript can convert to PDF.(The commercial product, Mayura Draw 4.01 or something 
-higher can produce PDF-files straight away)
-
-If you want to produce bar codes, you might need some of these modules
-
-   GD::Barcode
-   GD::Barcode::Code39
-   GD::Barcode::COOP2of5
-   GD::Barcode::EAN13
-   GD::Barcode::EAN8
-   GD::Barcode::IATA2of5
-   GD::Barcode::Industrial2of5
-   GD::Barcode::ITF
-   GD::Barcode::Matrix2of5
-   GD::Barcode::NW7
-   GD::Barcode::UPCA
-   GD::Barcode::UPCE
-
-(Latest upgrade of GD didn't work on my computer, so I had to comment
-away every reference to it in the modules, but then it worked very well.)
-
-If you want to import jpeg-images, you might need
-
-   Image::Info
-
-To get definitions for e.g. colors, take them from
-
-   PDF::API2::Util 
-
-=head1 LIMITATIONS
-
-Outlines, metadata, info and many other features of the PDF-format have not been
-implemented in this module. 
-
-Many things can be added afterwards, after creating the files. If you e.g. need
-files to be encrypted, you can use a standard batch routine within Adobe Acrobat.   
-
-=head1 TODO
-
-I have been experimenting a little with a helper application for Netscape or
-Internet Explorer and it is quite obvious that you could get very good performance
-and high reliability if you transferred the logs and constructed the documents at
-the target computer, instead of the transferring formatted documents.
-The reasons are:
-
-The size of a log is usually only a fraction of the formatted document. The logs
-keep a time stamp for all source files, so you could have a simple cashing. It is
-possible to put a time stamp on the log file and then you get a hierarchal structure.
-When the system reads a log file it could quickly find out which source files are
-missing. If it encounters the URL and time stamp of cashed log file, that would be
-sufficient.  It would not be necessary to get it over the net.
-You would minimize the number of conversations and you would also increase the
-possibilities to complete a task even if the connections are bad.    
-
-The cash could function as a secondary library for forms and JavaScripts.
-When you work with HTML you are usually interested in the most recent version of
-of a component. With PDF the emphasis is usually more on exactness, and PDF-documents
-tend to be more stable. This strengthens the motive for a functioning cash.
-
-(Also I think you could skip some holy rules from HTML-processing. E.g. if an 
-international body has forms and JavaScripts for booking a hotel room, any 
-affiliated hotel should have the right to use the common files, so they could be
-used via the cash regardless of if you are booking a room in Agadir or Shanghai.
-That would create libraries and rational reuse of code. I think security and
-legal problems would be possible to handle.)
-
-At the present time PDF cannot compete with HTML, but if you used the log files
-and a simple cash, PDF would be just superior for repeated tasks.
-
-=head1 AUTHOR
-
-Lars Lundberg elkelund@worldonline.se
-
-=head1 COPYRIGHT
-
-Copyright (C) 2003 Lars Lundberg, Solidez HB. All rights reserved.
-This program is free software; you can redistribute it and/or
-modify it under the same terms as Perl itself.
-
-=head1 DISCLAIMER
-
-You get this module free as it is, but NOTHING IS GUARANTEED to work, whatever 
-implicitly or explicitly stated in this document, and everything you do, 
-you do AT YOUR OWN RISK - I will not take responsibility 
-for any damage, loss of money and/or health that may arise from the use of this module!
-

@@ -3,7 +3,7 @@ Makefile.PL
 MANIFEST
 README
 Reuse.pm
-t/1.t
+test.pl
 examples/ex1_pl
 examples/ex2_pl
 examples/ex3_pl

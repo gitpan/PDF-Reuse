@@ -1,4 +1,4 @@
-PDF/Reuse version 0.03
+PDF/Reuse version 0.05
 ======================
 
 This module gives you a possibility to reuse PDF-files. You can use pages,
@@ -78,7 +78,7 @@ This module requires these other modules:
   Compress::Zlib
   Digest::MD5
   Exporter
-  SelfLoader
+  AutoLoader
 
 
 COPYRIGHT AND LICENCE

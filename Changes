@@ -12,4 +12,10 @@ Revision history for Perl extension PDF::Reuse.
    - Corrected an error that occured when a form was used many times in different
      documents. (Translation of old => new object number)
    - Some preparations for using PDF::Reuse as an COM-object (ActiveX object)
-     (In version 0.02 of PDF::Reuse::Tutorial there will be examples)
+     (In version 0.02 of PDF::Reuse::Tutorial there will be examples) 
+0.05 Wed May 21 15:45 
+     Tried to make the module backwards compatible with Perl 5.6.1
+     Changed use 5.008 to use 5.006, constants are individually defined and
+     AutoLoader is used instead of SelfLoader.
+     
+     
