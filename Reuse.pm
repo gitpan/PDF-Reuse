@@ -16,7 +16,7 @@ use autouse 'Compress::Zlib' => qw(compress($)
 use autouse 'Data::Dumper'   => qw(Dumper);
 use AutoLoader qw(AUTOLOAD);
 
-our $VERSION = '0.25';
+our $VERSION = '0.26';
 our @ISA     = qw(Exporter);
 our @EXPORT  = qw(prFile
                   prPage
@@ -976,7 +976,7 @@ sub prEnd
     {  $utrad .= "\/Names $NamesSaved 0 R\n"; 
     }
     elsif ((scalar %fields) || (scalar @jsfiler))
-    {  $utrad .= "\/Names behandlaNames() 0 R\n";
+    {  $utrad .= "\/Names " . behandlaNames() . " 0 R\n";
     }
     if (defined $AARootSaved)
     {  $utrad .= "/AA $AARootSaved\n";
@@ -4367,16 +4367,15 @@ sub getPage
             {  $Font = $1;
                $$$robj[oTYPE] = 'Font';
                $$$robj[oNAME] = $Font;
-               if (! exists $font{$Font})
+               if ((! exists $font{$Font}) 
+               && ($action eq 'print'))
                {  $fontNr++;
                   $font{$Font}[foINTNAMN]          = 'Ft' . $fontNr;
                   $font{$Font}[foORIGINALNR]       = $gammal;
                   $fontSource{$Font}[foSOURCE]     = $fSource;
                   $fontSource{$Font}[foORIGINALNR] = $gammal;
-                  if ($action eq 'print')
-                  {   $font{$Font}[foREFOBJ]   = $ny;
-                      $objRef{'Ft' . $fontNr} = $ny;
-                  }
+                  $font{$Font}[foREFOBJ]   = $ny;
+                  $objRef{'Ft' . $fontNr} = $ny;
                }   
             }
                

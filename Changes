@@ -1,5 +1,9 @@
 Revision history for Perl extension PDF::Reuse.
 
+0.26 Thu Apr 15 2004
+     Bugs fixed. When an image was imported, the program could become confused
+	  about standard fonts. Importing of JavaScrips failed. Corrected.
+
 0.25 Sat Apr 10 2004
      -"prLink" added, to add and merge hyperlinks into a document
      -prStrWidth added. You get string width calculated for some predefined fonts.
