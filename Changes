@@ -1,5 +1,9 @@
 Revision history for Perl extension PDF::Reuse.
 
+0.08  Sun Jun 29
+     Corrected bugs which occurred when a font was going to be reused. The function
+     prInitVars has been added. changes to the documetation.
+
 0.07  Tue Jun 17
      You can add JavaScrips as strings, not only as files. Corrected bugs which
      occurred 1) when JavaScripts were added and 2) when the log for prAdd was

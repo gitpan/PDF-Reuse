@@ -14,12 +14,13 @@ use autouse 'Compress::Zlib' => qw(compress($));
 use AutoLoader qw(AUTOLOAD);
 
 
-our $VERSION = '0.07';
+our $VERSION = '0.08';
 our @ISA     = qw(Exporter);
 our @EXPORT  = qw(prFile
                   prPage
                   prId
                   prIdType
+                  prInitVars
                   prEnd
                   prExtract
                   prForm
@@ -51,11 +52,11 @@ our @EXPORT  = qw(prFile
 our ($utfil, $utrad, $slutNod, $formRes, $formCont,
     $formRot, $del1, $del2, $obj, $nr,
     $vektor, $parent, $resOffset, $resLength, $infil, $seq, $imSeq, $rform, $robj,
-    $page, $Annots, $Names, $AARoot, $AAPage, $sidObjNr,  # $aktNod, 
+    $page, $Annots, $Names, $AARoot, $AAPage, $sidObjNr,  
     $AcroForm, $interActive, $NamesSaved, $AARootSaved, $AAPageSaved, $root,
-    $AcroFormSaved, $AnnotsSaved, $id, $ldir, $checkId, 
+    $AcroFormSaved, $AnnotsSaved, $id, $ldir, $checkId, $formNr, $imageNr, 
     $filnamn, $interAktivSida, $taInterAkt, $type, $runfil, $checkCs,
-    $confuseObj, $compress,$pos, $formNr, $imageNr, $fontNr, $objNr, $xPos, $yPos,
+    $confuseObj, $compress,$pos, $fontNr, $objNr, $xPos, $yPos,
     $defGState, $gSNr, $pattern, $shading, $colorSpace);
  
 our (@kids, @counts, @size, @formBox, @objekt, @parents, @aktuellFont, @skapa,
@@ -63,13 +64,13 @@ our (@kids, @counts, @size, @formBox, @objekt, @parents, @aktuellFont, @skapa,
  
 our ( %old, %oldObject, %resurser, %form, %image, %objRef, %nyaFunk, %fontSource, 
      %sidFont, %sidXObject, %sidExtGState, %font, %intAct, %fields, %script, 
-     %initScript, %sidPattern, %sidShading, %sidColorSpace, %extract,
+     %initScript, %sidPattern, %sidShading, %sidColorSpace, %knownToFile,
      %processed);
 
-our $stream = '';
-our $idTyp  = '';
-our $ddir   = '';
-our $log    = '';
+our $stream  = '';
+our $idTyp   = '';
+our $ddir    = '';
+our $log     = '';
 
 #########################
 # Konstanter för objekt
@@ -95,27 +96,25 @@ use constant   fOBJ       => 0;
 use constant   fRESOFFSET => 1;   
 use constant   fRESLENGTH => 2;   
 use constant   fBBOX      => 3;
-use constant   fNAMN      => 4;
-use constant   fSTAMP     => 5;
-use constant   fIMAGES    => 6;
-use constant   fMAIN      => 7;
-use constant   fKIDS      => 8;
-use constant   fNOKIDS    => 9;
-use constant   fID        => 10;
-use constant   fVALID     => 11;
+use constant   fSTAMP     => 4;
+use constant   fIMAGES    => 5;
+use constant   fMAIN      => 6;
+use constant   fKIDS      => 7;
+use constant   fNOKIDS    => 8;
+use constant   fID        => 9;
+use constant   fVALID     => 10;
 
 ####################################
 # Konstanter för images
 ####################################
 
-use constant   imNAMN      => 0;   
-use constant   imWIDTH     => 1;   
-use constant   imHEIGHT    => 2; 
-use constant   imXPOS      => 3;
-use constant   imYPOS      => 4;
-use constant   imXSCALE    => 5;
-use constant   imYSCALE    => 6;
-use constant   imIMAGENO   => 7;
+use constant   imWIDTH     => 0;   
+use constant   imHEIGHT    => 1; 
+use constant   imXPOS      => 2;
+use constant   imYPOS      => 3;
+use constant   imXSCALE    => 4;
+use constant   imYSCALE    => 5;
+use constant   imIMAGENO   => 6;
 
 #####################################
 # Konstanter för interaktiva objekt
@@ -136,6 +135,7 @@ use constant   foREFOBJ     => 0;
 use constant   foINTNAMN    => 1;
 use constant   foEXTNAMN    => 2;
 use constant   foORIGINALNR => 3;
+use constant   foSOURCE     => 4;
 
 our $xScale   = 1;
 our $yScale   = 1;
@@ -143,7 +143,7 @@ our $touchUp  = 1;
 our $lastFile = '+';
 
 our %stdFont = 
-       ( 'Times-Roman'           => 'Times-Roman',
+       ('Times-Roman'           => 'Times-Roman',
         'Times-Bold'            => 'Times-Bold',
         'Times-Italic'          => 'Times-Italic',
         'Times-BoldItalic'      => 'Times-BoldItalic',
@@ -181,13 +181,12 @@ our $fontSize     = 12;
 
 keys(%resurser)  = 10;
 
+
     
 sub prFont
 {   my $nyFont = shift;
     my ($intnamn, $extnamn, $objektnr, $oldIntNamn, $oldExtNamn);
-    if ($runfil)
-    {  $log .= "Font~$nyFont\n";
-    }
+    
     if (! $pos)
     {  errLog("No output file, you have to call prFile first");
     }
@@ -199,6 +198,9 @@ sub prFont
     else
     {   $intnamn = $aktuellFont[foINTNAMN];
         $extnamn = $aktuellFont[foEXTNAMN];
+    }
+    if ($runfil)
+    {  $log .= "Font~$nyFont\n";
     }
     if (wantarray)
     {  return ($intnamn, $extnamn, $oldIntNamn, $oldExtNamn);
@@ -295,7 +297,7 @@ sub prFile
    @inits       = ();
    %nyaFunk     = ();
    %objRef      = ();
-   %extract     = ();
+   %knownToFile = ();
    @aktuellFont = ();
    %processed   = ();
    undef $defGState;
@@ -441,7 +443,7 @@ sub prForm
   if (! exists $form{$fSource})
   {  $formNr++;
      $namn = 'Fm' . $formNr;
-     $form{$fSource}[fNAMN] = $namn;
+     $knownToFile{$fSource} = $namn;
      my $action;
      if ($effect eq 'load')
      {  $action = 'load'
@@ -465,7 +467,14 @@ sub prForm
      }
   }
   else
-  {  $namn = $form{$fSource}[fNAMN];
+  {  if (exists $knownToFile{$fSource})
+     {  $namn = $knownToFile{$fSource};
+     }
+     else
+     {  $formNr++;
+        $namn = 'Fm' . $formNr;
+        $knownToFile{$fSource} = $namn;
+     }
      if (exists $objRef{$namn})
      {  $refNr = $objRef{$namn};
      }
@@ -481,7 +490,7 @@ sub prForm
            {  errLog($mess);
            }
         }
-        else
+        elsif ($effect ne 'load')
         {  $refNr         =  byggForm($infil, $sidnr);
            $objRef{$namn} =  $refNr;
         }
@@ -515,6 +524,9 @@ sub prForm
   }
   if (! $pos)
   {  errLog("No output file, you have to call prFile first");
+  }
+  if (($effect ne 'print') && ($effect ne 'add'))
+  {  undef $namn;
   }
   if (wantarray)
   {  my $images = 0;
@@ -553,7 +565,7 @@ sub prDefaultGrState
 ######################################################
 
 sub findFont()
-{  
+{  no warnings;
    my $Font = shift || '';
       
    if (! (exists $fontSource{$Font}))        #  Fonten måste skapas
@@ -567,11 +579,11 @@ sub findFont()
          my $fontAbbr           = 'Ft' . $fontNr; 
          my $fontObjekt         = "$objNr 0 obj\n<</Type/Font/Subtype/Type1" .
                                "/BaseFont/$Font/Encoding/WinAnsiEncoding>>\nendobj\n";
-         $font{$Font}[foINTNAMN]  = $fontAbbr; 
-         $font{$Font}[foREFOBJ]   = $objNr;
-         $objRef{$fontAbbr}       = $objNr;
-         $fontSource{$Font}       = 'Standard';
-         $objekt[$objNr]          = $pos;
+         $font{$Font}[foINTNAMN]      = $fontAbbr; 
+         $font{$Font}[foREFOBJ]       = $objNr;
+         $objRef{$fontAbbr}           = $objNr;
+         $fontSource{$Font}[foSOURCE] = 'Standard';
+         $objekt[$objNr]              = $pos;
          $pos += syswrite UTFIL, $fontObjekt;
       }
    }
@@ -579,7 +591,7 @@ sub findFont()
    {  if (defined $font{$Font}[foREFOBJ])       # Finns redan i filen
       {  ; }
       else
-      {  if ($fontSource{$Font} eq 'Standard')
+      {  if ($fontSource{$Font}[foSOURCE] eq 'Standard')
          {   $objNr++;
              $fontNr++;
              my $fontAbbr           = 'Ft' . $fontNr; 
@@ -592,20 +604,17 @@ sub findFont()
              $pos += syswrite UTFIL, $fontObjekt;
          }
          else
-         {  my $fSource = $fontSource{$Font};
+         {  my $fSource = $fontSource{$Font}[foSOURCE];
             my $ri      = rindex($fSource, '_');
             my $Source  = substr($fSource, 0, $ri);
-            my $Page    = substr($fSource, ($ri + 1)); 
-            my @res = prForm ($Source, $Page, undef, 'no', 1);
-            if (! @res)
-            {  errLog("Couldn't rebuild form $Source page $Page, aborts");
-            }
-            if (! $font{$Font}[foORIGINALNR])
-            {  errlog("Couldn't find $Font, aborts");
+            my $Page    = substr($fSource, ($ri + 1));
+            
+            if (! $fontSource{$Font}[foORIGINALNR])
+            {  errLog("Couldn't find $Font, aborts");
             }
             else
-            {  my $namn = extractObject($Source, $page,
-                                        $font{$Font}[foORIGINALNR], 'Font');
+            {  my $namn = extractObject($Source, $Page,
+                                        $fontSource{$Font}[foORIGINALNR], 'Font');
             } 
          }
       }
@@ -1315,7 +1324,7 @@ Alternatively you can call this function with a hash like this
     my $internalName = prForm ( {file     => 'myFile.pdf',
                                  page     => 2,
                                  adjust   => 1,
-                                 effect   => 'load',
+                                 effect   => 'print',
                                  tolerant => 1 } );
 
 if B<$page> is excluded 1 is assumed. B<$adjust>, could be 1 or nothing. If it is 
@@ -1329,7 +1338,8 @@ table, adds it to the document and prints it to the current page. B<'add'>, load
 page and adds it to the document. (Now you can "manually" manage the way you want to
 print it to different pages within the document.) B<'load'> just loads the page in an 
 internal table. (You can now take I<parts> of a page like fonts and objects and manage
-them, without adding all the page to the document.)B<tolerant> can be nothing or
+them, without adding all the page to the document.)You don't get any defined 
+internal name of the form, if you let this parameter be 'load'.B<tolerant> can be nothing or
 something. If it is undefined, you will get an error if your program tries to load
 a page which the system cannot really handle, if it e.g. consists of many streams.
 If it is set to something, you have to test the first return value $internalName to
@@ -1498,7 +1508,7 @@ but not shown at this moment.
    my @vec2 = prImage( { file    => 'destiny.pdf',
                          pageNo  => 1,
                          imageNo => 1,
-                         effect  => 'load' } );
+                         effect  => 'add' } );
    prText(25, 760, "There shouldn't be any image on this page");
    prPage();
    ########################################################
@@ -1547,6 +1557,31 @@ page, the two images are scaled and shown with "low level" directives.
 
 In the distribution there is an utility program, 'reuseComponent_pl', which displays
 included images in a PDF-file and their "names".
+
+=item  prInitVars([1])
+
+To initiate global variables. If you run programs with PDF::Reuse as persistent
+procedures, you probably need to initiate global variables. 
+If you have '1' or anything as parameter, internal tables for forms, images, fonts
+and interactive functions are B<not> initiated. The module "learns" offset and sizes of
+used objects, and can process them faster, but at the same time the size of the 
+program grows.
+
+If you call this function without parameters all global variables, including the
+internal tables, are initiated.
+
+   use PDF::Reuse;
+   use strict;
+   prInitVars(1);
+
+   prDocDir('C:/temp/doc');
+   prLogDir('C:/run');
+
+   prFile('myFile.pdf');
+   prForm('best.pdf');
+   prText(25, 790, 'Dear Mr. Anders Persson');
+   # ...
+   prEnd();
 
 =item prJpeg ( $imageFile, $width, $height )
 
@@ -1658,8 +1693,9 @@ He could still save it as Postscript and redistill, or he could remove or add si
 It would be very difficult to forge a document unless the forger also has access to your
 computer and knows how the check sums are calculated.)
 
-(Avoid perhaps to switch off the TouchUp tool for your templates, because it creates an
-extra level within the PDF-documents, but use it for your final documents)
+B<Avoid to switch off the TouchUp tool for your templates.> It creates an
+extra level within the PDF-documents, but use it for your final documents.
+ 
 
 See "Using the template" in the tutorial for an example. 
 
@@ -1703,7 +1739,8 @@ table, adds it to the document and prints it to the current page. B<'add'>, load
 page and adds it to the document. (Now you can "manually" manage the way you want to
 print it to different pages within the document.) B<'load'> just loads the page in an 
 internal table. (You can now take I<parts> of a page like fonts and objects and manage
-them, without adding all the page to the document.)
+them, without adding all the page to the document.) You don't get any defined internal name of the
+form, if you let this parameter be 'load'.
 
 In list context returns B<$internalName, @BoundingBox[1..4], $numberOfImages>.
 In scalar context returns B<$internalName> of the graphic form.
@@ -1736,9 +1773,17 @@ Remember to save that file before closing it.)
 
 B<$fieldName> is an interactive field in the document you are creating.
 It has to be spelled exactly the same way here as it spelled in the document.
-B<$value> is what you want to assigned to the field
+B<$value> is what you want to assigned to the field. 
 
 See prDocForm() for an example
+
+If you are going to assign a value to a field consisting of several lines, you
+can write like this:
+
+   my $string = 'This is the first line \\\r second line \\\n 3:rd line';
+   prField('fieldName', $string);
+
+You need 3 backslashes to preserve the special characters, if you have single-quotes.
 
 =item prInit ( $string )
 
@@ -1856,6 +1901,45 @@ for any damage, loss of money and/or health that may arise from the use of this 
 
 =cut
 
+sub prInitVars
+{   my $exit = shift;
+    $genLowerX    = 0;
+    $genLowerY    = 0;
+    $genUpperX    = 595,
+    $genUpperY    = 842;
+    $fontSize     = 12;
+    ($utfil, $utrad, $slutNod, $formRes, $formCont,
+    $formRot, $del1, $del2, $obj, $nr,
+    $vektor, $parent, $resOffset, $resLength, $infil, $seq, $imSeq, $rform, $robj,
+    $page, $Annots, $Names, $AARoot, $AAPage, $sidObjNr,  
+    $AcroForm, $interActive, $NamesSaved, $AARootSaved, $AAPageSaved, $root,
+    $AcroFormSaved, $AnnotsSaved, $id, $ldir, $checkId, $formNr, $imageNr, 
+    $filnamn, $interAktivSida, $taInterAkt, $type, $runfil, $checkCs,
+    $confuseObj, $compress,$pos, $fontNr, $objNr, $xPos, $yPos,
+    $defGState, $gSNr, $pattern, $shading, $colorSpace) = '';
+
+    (@kids, @counts, @size, @formBox, @objekt, @parents, @aktuellFont, @skapa,
+     @jsfiler, @inits) = ();
+
+    ( %old, %oldObject, %resurser,  %objRef, %nyaFunk, 
+      %sidFont, %sidXObject, %sidExtGState, %font, %fields, %script,
+      %initScript, %sidPattern, %sidShading, %sidColorSpace, %knownToFile,
+      %processed) = ();
+
+     $stream = '';
+     $idTyp  = '';
+     $ddir   = '';
+     $log    = '';
+
+     if ($exit)
+     {  return 1;
+     }
+   
+     ( %form, %image, %fontSource, %intAct) = ();
+
+     return 1;
+}
+
 ####################
 # Behandla en bild
 ####################
@@ -1891,7 +1975,7 @@ sub prImage
   if (! exists $image{$iSource})
   {  $imageNr++;
      $inamn = 'Im' . $imageNr;
-     $image{$iSource}[imNAMN]   = $inamn;
+     $knownToFile{'Im:' . $iSource} = $inamn;
      $image{$iSource}[imXPOS]   = $xPos;
      $image{$iSource}[imYPOS]   = $yPos;
      $image{$iSource}[imXSCALE] = $xScale;
@@ -1900,14 +1984,21 @@ sub prImage
      {  getPage($infil, $sidnr, '');
         $formNr++;
         my $namn = 'Fm' . $formNr;
-        $form{$fSource}[fNAMN] = $namn;          
+        $knownToFile{$fSource} = $namn;          
      }
      my $in = $form{$fSource}[fIMAGES][$bildIndex];
      $image{$iSource}[imWIDTH]  = $form{$fSource}->[fOBJ]->{$in}->[oWIDTH];
      $image{$iSource}[imHEIGHT] = $form{$fSource}->[fOBJ]->{$in}->[oHEIGHT];
      $image{$iSource}[imIMAGENO] = $form{$fSource}[fIMAGES][$bildIndex];
   }
-  $inamn = $image{$iSource}[imNAMN];
+  if (exists $knownToFile{'Im:' . $iSource})
+  {   $inamn = $knownToFile{'Im:' . $iSource};
+  }
+  else
+  {   $imageNr++;
+      $inamn = 'Im' . $imageNr;
+      $knownToFile{'Im:' . $iSource} = $inamn;
+  }
   if (! exists $objRef{$inamn})         
   {  $refNr = getImage($infil,  $sidnr, 
                        $bildnr, $image{$iSource}[imIMAGENO]);
@@ -2075,8 +2166,8 @@ sub prExtract
    {  $name = $1;
    }
    my $fullName = "$name~$form~$page";
-   if (exists $extract{$fullName})
-   {   return $extract{$fullName};
+   if (exists $knownToFile{$fullName})
+   {   return $knownToFile{$fullName};
    }
    else
    {   if ($runfil)
@@ -2091,7 +2182,7 @@ sub prExtract
        }
        $name = extractName($form, $page, $name);
        if ($name)
-       {  $extract{$fullName} = $name;
+       {  $knownToFile{$fullName} = $name;
        }
        return $name;
    }
@@ -2156,7 +2247,7 @@ sub prDocForm
   if (! exists $form{$fSource})
   {  $formNr++;
      $namn = 'Fm' . $formNr;
-     $form{$fSource}[fNAMN] = $namn;
+     $knownToFile{$fSource} = $namn;
      if ($effect eq 'load')
      {  $action = 'load'
      }
@@ -2179,7 +2270,14 @@ sub prDocForm
      }
   }
   else
-  {  $namn = $form{$fSource}[fNAMN];
+  {  if (exists $knownToFile{$fSource})
+     {   $namn = $knownToFile{$fSource};
+     }
+     else
+     {  $formNr++;
+        $namn = 'Fm' . $formNr;
+        $knownToFile{$fSource} = $namn; 
+     }
      if (exists $objRef{$namn})
      {  $refNr = $objRef{$namn};
      }
@@ -2195,7 +2293,7 @@ sub prDocForm
            {  errLog($mess);
            }
         }
-        else
+        elsif ($effect ne 'load')
         {  $refNr         =  byggForm($infil, $sidnr);
            $objRef{$namn} = $refNr;
         }
@@ -2237,7 +2335,9 @@ sub prDocForm
   if (! $pos)
   {  errLog("No output file, you have to call prFile first");
   }
-
+  if (($effect ne 'print') && ($effect ne 'add'))
+  {  undef $namn;
+  }
   if (wantarray)
   {  my $images = 0;
      if (exists $form{$fSource}[fIMAGES])
@@ -3116,9 +3216,10 @@ sub getPage
                   $$$robj[oNAME]    = $Font;
                   if (! exists $font{$Font})
                   {  $fontNr++;
-                     $font{$Font}[foINTNAMN]    = 'Ft' . $fontNr;
-                     $font{$Font}[foORIGINALNR] = $gammal;
-                     $fontSource{$Font}         = $fSource;
+                     $font{$Font}[foINTNAMN]          = 'Ft' . $fontNr;
+                     $font{$Font}[foORIGINALNR]       = $gammal;
+                     $fontSource{$Font}[foSOURCE]     = $fSource;
+                     $fontSource{$Font}[foORIGINALNR] = $gammal;
                      if ($action eq 'print')
                      {   $font{$Font}[foREFOBJ]   = $ny;
                          $objRef{'Ft' . $fontNr} = $ny;
@@ -3332,7 +3433,8 @@ sub kolla
 ##############################
 
 sub byggForm
-{  my ($infil, $sidnr) = @_;
+{  no warnings; 
+   my ($infil, $sidnr) = @_;
    
    my $res;
    my $corr;
@@ -3879,9 +3981,10 @@ sub extractName
          if (! exists $font{$extNamn})
          {  $fontNr++;
             $Font = 'Ft' . $fontNr;
-            $font{$extNamn}[foINTNAMN]    = $Font;
-            $font{$extNamn}[foORIGINALNR] = $nr;
-            $fontSource{$extNamn}         = $fSource;            
+            $font{$extNamn}[foINTNAMN]       = $Font;
+            $font{$extNamn}[foORIGINALNR]    = $nr;
+            $fontSource{$Font}[foSOURCE]     = $fSource;
+            $fontSource{$Font}[foORIGINALNR] = $nr;            
          }
          $font{$extNamn}[foREFOBJ]   = $nr;
          $Font = $font{$extNamn}[foINTNAMN];
@@ -3975,7 +4078,8 @@ sub extractName
 ########################
 
 sub extractObject
-{  my ($infil, $sidnr, $key, $typ) = @_;
+{  no warnings;
+   my ($infil, $sidnr, $key, $typ) = @_;
    
    my ($res, $del1, $corr, $namn);
    my $del2 = '';
@@ -4006,6 +4110,8 @@ sub extractObject
     }
     if ($ldir)
     {  $log .= "Cid~$stati[9]\n";
+       my $indata = prep($infil);
+       $log .= "Form~$indata~$sidnr~~load~1\n";
     }
 
    open (INFIL, "<$infil") || errLog("The file $infil couldn't be opened, aborting $!");
@@ -4040,19 +4146,25 @@ sub extractObject
    {  sysseek INFIL, $oD[oPOS], 0;
       sysread INFIL, $del1, $oD[oSIZE];
    }
-      
-   $nr = quickxform($key);
-
+     
+   if (exists $old{$key})
+   {  $nr = $old{$key}; }
+   else
+   {  $old{$key} = ++$objNr;
+      $nr = $objNr;
+   }     
+ 
    if ($typ eq 'Font')
    {  my ($Font, $extNamn);
       if ($del1 =~ m'/BaseFont\s*/([^\s\/]+)'os)
       {  $extNamn = $1;
-         if (! exists $font{$extNamn})
-         {  $fontNr++;
-            $Font = 'Ft' . $fontNr;
-            $font{$extNamn}[foINTNAMN]    = $Font;
-            $font{$extNamn}[foORIGINALNR] = $nr;
-            $fontSource{$extNamn}         = $fSource;            
+         $fontNr++;
+         $Font = 'Ft' . $fontNr;
+         $font{$extNamn}[foINTNAMN]    = $Font;
+         $font{$extNamn}[foORIGINALNR] = $key;
+         if ( ! defined $fontSource{$extNamn}[foSOURCE])
+         {  $fontSource{$extNamn}[foSOURCE]     = $fSource;
+            $fontSource{$extNamn}[foORIGINALNR] = $key;            
          }
          $font{$extNamn}[foREFOBJ]   = $nr;
          $Font = $font{$extNamn}[foINTNAMN];
