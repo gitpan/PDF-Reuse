@@ -10,12 +10,13 @@ use autouse 'Carp' => qw(carp
                          cluck
                          croak);
 
-use autouse 'Compress::Zlib' => qw(compress($));
+use autouse 'Compress::Zlib' => qw(compress($)
+                                   inflateInit());
+
 use autouse 'Data::Dumper'   => qw(Dumper);
 use AutoLoader qw(AUTOLOAD);
 
-
-our $VERSION = '0.14';
+our $VERSION = '0.15';
 our @ISA     = qw(Exporter);
 our @EXPORT  = qw(prFile
                   prPage
@@ -51,9 +52,9 @@ our @EXPORT  = qw(prFile
                   prMbox
                   prBookmark);
 
-our ($utfil, $utrad, $slutNod, $formRes, $formCont,
-    $formRot, $del1, $del2, $obj, $nr,
-    $vektor, $parent, $resOffset, $resLength, $infil, $seq, $imSeq, $rform, $robj,
+our ($utfil, $utrad, $slutNod, $formCont,
+    $formRot, $obj, $nr,
+    $vektor, $parent, $infil, $imSeq, $rform, $robj,
     $page, $Annots, $Names, $AARoot, $AAPage, $sidObjNr,  
     $AcroForm, $interActive, $NamesSaved, $AARootSaved, $AAPageSaved, $root,
     $AcroFormSaved, $AnnotsSaved, $id, $ldir, $checkId, $formNr, $imageNr, 
@@ -61,13 +62,13 @@ our ($utfil, $utrad, $slutNod, $formRes, $formCont,
     $confuseObj, $compress,$pos, $fontNr, $objNr, $xPos, $yPos,
     $defGState, $gSNr, $pattern, $shading, $colorSpace, $totalCount);
  
-our (@kids, @counts, @size, @formBox, @objekt, @parents, @aktuellFont, @skapa,
+our (@kids, @counts, @formBox, @objekt, @parents, @aktuellFont, @skapa,
     @jsfiler, @inits, @bookmarks);
  
 our ( %old, %oldObject, %resurser, %form, %image, %objRef, %nyaFunk, %fontSource, 
      %sidFont, %sidXObject, %sidExtGState, %font, %intAct, %fields, %script, 
      %initScript, %sidPattern, %sidShading, %sidColorSpace, %knownToFile,
-     %processed);
+     %processed, %embedded, %unZipped);
 
 our $stream  = '';
 our $idTyp   = '';
@@ -78,33 +79,30 @@ our $log     = '';
 # Konstanter för objekt
 #########################
 
-use constant   oPOS       => 0;
-use constant   oSIZE      => 1;
+use constant   oNR        => 0;
+use constant   oPOS       => 1;
 use constant   oSTREAMP   => 2;
 use constant   oKIDS      => 3;
-use constant   oFORM      => 4;  
-use constant   oIMAGE     => 5;  
-use constant   oIMAGENR   => 6;  
-use constant   oWIDTH     => 7;  
-use constant   oHEIGHT    => 8;  
-use constant   oTYPE      => 9;
-use constant   oNAME      => 10;
+use constant   oFORM      => 4;   
+use constant   oIMAGENR   => 5;  
+use constant   oWIDTH     => 6;  
+use constant   oHEIGHT    => 7;  
+use constant   oTYPE      => 8;
+use constant   oNAME      => 9;
 
 ###################################
 # Konstanter för formulär
 ###################################
 
 use constant   fOBJ       => 0;
-use constant   fRESOFFSET => 1;   
-use constant   fRESLENGTH => 2;   
-use constant   fBBOX      => 3;
-use constant   fSTAMP     => 4;
-use constant   fIMAGES    => 5;
-use constant   fMAIN      => 6;
-use constant   fKIDS      => 7;
-use constant   fNOKIDS    => 8;
-use constant   fID        => 9;
-use constant   fVALID     => 10;
+use constant   fRESOURCE  => 1;   
+use constant   fBBOX      => 2;
+use constant   fIMAGES    => 3;
+use constant   fMAIN      => 4;
+use constant   fKIDS      => 5;
+use constant   fNOKIDS    => 6;
+use constant   fID        => 7;
+use constant   fVALID     => 8;
 
 ####################################
 # Konstanter för images
@@ -183,8 +181,6 @@ our $fontSize     = 12;
 
 keys(%resurser)  = 10;
 
-
-    
 sub prFont
 {   my $nyFont = shift;
     my ($intnamn, $extnamn, $objektnr, $oldIntNamn, $oldExtNamn);
@@ -337,13 +333,14 @@ sub prFile
 
 sub prPage
 {  my $noLogg = shift;
-   if (length($stream) > 0)
+   if ((defined $stream) && (length($stream) > 0))
    { skrivSida();
    }
+    
    $page++;
    $objNr++;
    $sidObjNr = $objNr;
-
+   
    #
    # Resurserna nollställs
    #
@@ -1082,9 +1079,10 @@ functional to be fast, and to give your programs capacity to produce many pages
 per second and very big PDF documents if necessary.
 
 The module produces PDF-1.4 files. Some features of PDF-1.5, like "object streams"
-and "cross reference streams",  have not yet been implemented. (If you get problems
-with a new document from Acrobat 6.0, try to save it or recreate it as a PDF-1.4
-document first, before using it together with this module.) 
+and "cross reference streams", are supported, but only at an experimental level. More
+testing is needed. (If you get problems with a new document from Acrobat 6.0, try to 
+save it or recreate it as a PDF-1.4 document first, before using it together with 
+this module.) 
 
 =over 2
 
@@ -1215,6 +1213,7 @@ not write anything to the current page.
 
 B<An easier and often better way to produce barcodes is to use PDF::Reuse::Barcode. 
 Look at that module!>
+
 
 =head2 prBookmark($reference)
 
@@ -1433,7 +1432,8 @@ can use the font, but perhaps some of your letters were not defined.
 
 In the distribution there is an utility program, 'reuseComponent_pl', which displays
 included fonts in a PDF-file and prints some letters. Run it to see the name of the
-font and if it is worth extracting.
+font and if it is worth extracting. ('reuseComponent_pl' cannot yet handle files 
+with 'cross reference objects' and 'object streams' from Acrobat 6.0)
 
    use PDF::Reuse;
    use strict;
@@ -1702,7 +1702,9 @@ is processed, prImage(), loads an image, but it is not shown here. On the 3:rd
 page, the two images are scaled and shown with "low level" directives. 
 
 In the distribution there is an utility program, 'reuseComponent_pl', which displays
-included images in a PDF-file and their "names".
+included images in a PDF-file and their "names". (The program cannot yet handle files 
+with 'cross reference objects' and 'object streams' from Acrobat 6.0)
+
 
 =head2 prInit ( $string )
 
@@ -1710,10 +1712,10 @@ B<$string> can be any JavaScript code, but you can only refer to functions inclu
 with prJs. The JavaScript interpreter will not know other functions in the document.
 Often you can add new things, but you can't remove or change interactive fields,
 because the interpreter hasn't come that far, when initiation is done.
-
 See prJs() for an example
 
-=head2  prInitVars([1])
+
+=head2 prInitVars([1])
 
 To initiate global variables. If you run programs with PDF::Reuse as persistent
 procedures, you probably need to initiate global variables. 
@@ -2154,9 +2156,9 @@ sub prInitVars
     $genUpperX    = 595,
     $genUpperY    = 842;
     $fontSize     = 12;
-    ($utfil, $utrad, $slutNod, $formRes, $formCont,
-    $formRot, $del1, $del2, $obj, $nr,
-    $vektor, $parent, $resOffset, $resLength, $infil, $seq, $imSeq, $rform, $robj,
+    ($utfil, $utrad, $slutNod, $formCont,
+    $formRot, $obj, $nr,
+    $vektor, $parent, $infil, $imSeq, $rform, $robj,
     $page, $Annots, $Names, $AARoot, $AAPage, $sidObjNr,  
     $AcroForm, $interActive, $NamesSaved, $AARootSaved, $AAPageSaved, $root,
     $AcroFormSaved, $AnnotsSaved, $id, $ldir, $checkId, $formNr, $imageNr, 
@@ -2164,13 +2166,13 @@ sub prInitVars
     $confuseObj, $compress,$pos, $fontNr, $objNr, $xPos, $yPos,
     $defGState, $gSNr, $pattern, $shading, $colorSpace) = '';
 
-    (@kids, @counts, @size, @formBox, @objekt, @parents, @aktuellFont, @skapa,
+    (@kids, @counts, @formBox, @objekt, @parents, @aktuellFont, @skapa,
      @jsfiler, @inits, @bookmarks) = ();
 
     ( %old, %oldObject, %resurser,  %objRef, %nyaFunk, 
       %sidFont, %sidXObject, %sidExtGState, %font, %fields, %script,
       %initScript, %sidPattern, %sidShading, %sidColorSpace, %knownToFile,
-      %processed) = ();
+      %processed, %unZipped) = ();
 
      $stream = '';
      $idTyp  = '';
@@ -2664,6 +2666,7 @@ sub prJpeg
       $utrad = "$objNr 0 obj\n<</Type/XObject/Subtype/Image/Name/$namnet" .
                 "/Width $iWidth /Height $iHeight /BitsPerComponent 8 /Filter/DCTDecode/ColorSpace/DeviceRGB"
                 . "/Length $iLangd >>stream\n$iStream\nendstream\nendobj\n";
+      close BILDFIL;
       $pos += syswrite UTFIL, $utrad;
       if ($runfil)
       {  $log .= "Cid~$checkId\n";
@@ -3001,10 +3004,13 @@ sub prep
    return $indata;
 } 
 
-sub offSetSizes
+
+sub xRefs
 {  my $bytes = shift;
-   my ($j, $nr, $xref, $i, $antal, $inrad, $Root, $referens);
+   my ($j, $nr, $xref, $i, $antal, $inrad, $Root, $tempRoot, $referens);
    my $buf = '';
+   %embedded =();
+
    my $res = sysseek INFIL, -50, 2;
    if ($res)
    {  sysread INFIL, $buf, 100;
@@ -3014,94 +3020,21 @@ sub offSetSizes
       if ($buf =~ m'\bstartxref\s+(\d+)'o)
       {  $xref = $1;
          while ($xref)
-         {  $nr++;
-            $oldObject{('xref' . "$nr")} = $xref;  # Offset för xref sparas 
-            $xref += 5;
-            $res = sysseek INFIL, $xref, 0;
-            $xref  = 0;
-            $inrad = '';
-            $buf   = '';
-            my $c;
-            sysread INFIL, $c, 1;
-            while ($c =~ m!\s!s)   
-            {  sysread INFIL, $c, 1; }
-
-            while ( (defined $c)
-            &&   ($c ne "\n")
-            &&   ($c ne "\r") )   
-            {    $inrad .= $c;
-                 sysread INFIL, $c, 1;
+         {  $res = sysseek INFIL, $xref, 0;
+            $res = sysread INFIL, $buf, 200;
+            if ($buf =~ m '^\d+\s\d+\sobj'os)
+            {  ($xref, $tempRoot, $nr) = crossrefObj($nr, $xref);
             }
-
-            if ($inrad =~ m'^(\d+)\s+(\d+)'o)
-            {   $i     = $1;
-                $antal = $2;
+            else
+            {  ($xref, $tempRoot, $nr) = xrefSection($nr, $xref);
             }
-            
-            # while ($c =~ m!\s!s)   
-            # {  sysread INFIL, $c, 1; }
-         
-            # sysread INFIL, $inrad, 19;
-
-            while ($antal)
-            {   for (my $l = 1; $l <= $antal; $l++)
-                {  sysread INFIL, $inrad, 20;
-                   if ($inrad =~ m'^\s?(\d+) \d+ (\w)\s*'o)
-                   {  if ($2 eq 'n')
-                      {  if (! (exists $oldObject{$i}))
-                         {  $oldObject{$i} = $1; }
-                         else
-                         {  $nr++;
-                            $oldObject{'xref' . "$nr"} = $1;
-                         }
-                       } 
-                    }
-                    $i++;
-                 }
-                 undef $antal;
-                 undef $inrad;
-                 sysread INFIL, $c, 1;
-                 while ($c =~ m!\s!s)   
-                 {  sysread INFIL, $c, 1; }
-
-                 while ( (defined $c)
-                 &&   ($c ne "\n")
-                 &&   ($c ne "\r") )   
-                 {    $inrad .= $c;
-                      sysread INFIL, $c, 1;
-                 }
-                 if ($inrad =~ m'^(\d+)\s+(\d+)'o)
-                 {   $i     = $1;
-                     $antal = $2;
-                 }
-
+            if (($tempRoot) && (! $Root))
+            {  $Root = $tempRoot;
             }
-              
-            while ($inrad)
-            {   if ($buf =~ m'Encrypt'o)
-                {  errLog("The file $infil is encrypted, cannot be used, aborts");
-                }
-                if ((! $Root) && ($buf =~ m'\/Root\s+(\d+) \d+ R'so))
-                {  $Root = $1;
-                   if ($xref)
-                   { last; }
-                }
-
-                if ((! $xref) && ($buf =~ m'\/Prev\s+(\d+)\D'so))
-                {  $xref = $1;
-                   if ($Root)
-                   { last; }
-                }
-                
-                if ($buf =~ m'xref'so)
-                {  last; }
-                
-                sysread INFIL, $inrad, 30;
-                $buf .= $inrad;
-             }
-          }
+         }
       }
    }
+
    ($Root) || errLog("The Root object in $infil couldn't be found, aborting");
 
    ##############################################################
@@ -3110,19 +3043,345 @@ sub offSetSizes
 
    my @offset = sort { $oldObject{$b} <=> $oldObject{$a} } keys %oldObject;
 
-   
+   my $saved;
+
    for (@offset)
-   {   $bytes -= $oldObject{$_};
-       if ($_ !~ m'xref'o)
-       {  $size[$_] = $bytes;
+   {   $saved  = $oldObject{$_};
+       $bytes -= $saved;
+       
+       if ($_ !~ m'^xref'o)
+       {   if ($saved == 0)
+           {   $oldObject{$_} = [ 0, 0, $embedded{$_}];
+           }
+           else
+           {   $oldObject{$_} = [ $saved, $bytes];
+           }
        }
-       $bytes = $oldObject{$_};
+       $bytes = $saved;
    } 
+   %embedded = ();
    return $Root;
 }
 
+sub crossrefObj
+{   my ($nr, $xref) = @_;
+    my ($buf, %param, $len, $tempRoot);
+    my $from = $xref;
+    sysseek INFIL, $xref, 0;
+    sysread INFIL, $buf, 400;
+    my $str;
+    if ($buf =~ m'^(.+>>\s*)stream'os)
+    {  $str = $1;
+       $from = length($str) + 7;
+       if (substr($buf, $from, 1) eq "\n")
+       {  $from++;
+       }
+       $from += $xref;
+    }
+    
+    for (split('/',$str))
+    {  if ($_ =~ m'^(\w+)(.*)'o)
+       {  $param{$1} = $2 || ' ';
+       }
+    }
+    if ((exists $param{'Root'}) && ($param{'Root'} =~ m'^\s*(\d+)'o))
+    {  $tempRoot = $1;
+    }
+    my @keys = ($param{'W'} =~ m'(\d+)'og);
+    my $keyLength = 0;
+    for (@keys)
+    {  $keyLength += $_;
+    }
+    my $recLength = $keyLength + 1;
+    my $upTo = 1 + $keys[0] + $keys[1];
+    if ((exists $param{'Length'}) && ($param{'Length'} =~ m'(\d+)'o))
+    {  $len = $1;
+       sysseek INFIL, $from, 0;
+       sysread INFIL, $buf, $len;
+       my $x = inflateInit()
+               || die "Cannot create an inflation stream\n" ;
+       my ($output, $status) = $x->inflate(\$buf) ;
+       die "inflation failed\n"
+                     unless $status == 1;
+       
+       my $i = 0;
+       my @last = (0, 0, 0, 0, 0, 0, 0);
+       my @word = ('0', '0', '0', '0', '0', '0', '0');
+       my $recTyp;
+       my @intervall = ($param{'Index'} =~ m'(\d+)\D'osg);
+       my $m = 0;
+       my $currObj = $intervall[$m];
+       $m++;
+       my $max     = $currObj + $intervall[$m];   
+       
+       for (split('',$output))
+       {  if (($_ ne "\x0") && ($i > 0) && ($i < $upTo))
+          {   my $tal = ord($_) + $last[$i] ;
+              if ($tal > 255)
+              {$tal -= 256;
+              }
           
+              $last[$i] = $tal;
+              $word[$i] = sprintf("%x", $tal);
+              if (length($word[$i]) == 1)
+              {  $word[$i] = '0' . $word[$i];
+              }
+          }                    
+          $i++;
+          if ($i == $recLength)
+          {  $i = 0;
+             my $j = 0;
+             my $offsObj;               # offset or object
+             if ($keys[0] == 0)
+             {  $recTyp = 1;
+                $j = 1;
+             }
+             else
+             {  $recTyp = $word[1];
+                $j = 2;
+             }
+             my $k = 0;
+             while ($k < $keys[1])
+             {  $offsObj .= $word[$j];
+                $k++;
+                $j++;
+             }
+                       
+             if ($recTyp == 1)
+             {   if (! (exists $oldObject{$currObj}))
+                 {  $oldObject{$currObj} = hex($offsObj); }
+                 else
+                 {  $nr++;
+                    $oldObject{'xref' . "$nr"} = hex($offsObj);
+                 }
+             }
+             elsif ($recTyp == 2)
+             {   if (! (exists $oldObject{$currObj}))
+                 {  $oldObject{$currObj} = 0; 
+                 }
+                 $embedded{$currObj} = hex($offsObj);
+             }
+             if ($currObj < $max)
+             {  $currObj++;
+             }
+             else
+             {  $m++;
+                $currObj = $intervall[$m];
+                $m++;
+                $max     = $currObj + $intervall[$m];
+             } 
+          }
+       }       
+    }
+    return ($param{'Prev'}, $tempRoot, $nr);
+}
+ 
+sub xrefSection
+{   my ($nr, $xref) = @_;
+    my ($i, $root, $antal);    
+    $nr++;
+    $oldObject{('xref' . "$nr")} = $xref;  # Offset för xref sparas 
+    $xref += 5;
+    sysseek INFIL, $xref, 0;      
+    $xref  = 0;
+    my $inrad = '';
+    my $buf   = '';
+    my $c;
+    sysread INFIL, $c, 1;
+    while ($c =~ m!\s!s)   
+    {  sysread INFIL, $c, 1; }
 
+    while ( (defined $c)
+    &&   ($c ne "\n")
+    &&   ($c ne "\r") )   
+    {    $inrad .= $c;
+         sysread INFIL, $c, 1;
+    }
+
+    if ($inrad =~ m'^(\d+)\s+(\d+)'o)
+    {   $i     = $1;
+        $antal = $2;
+    }
+            
+    while ($antal)
+    {   for (my $l = 1; $l <= $antal; $l++)
+        {  sysread INFIL, $inrad, 20;
+           if ($inrad =~ m'^\s?(\d+) \d+ (\w)\s*'o)
+           {  if ($2 eq 'n')
+              {  if (! (exists $oldObject{$i}))
+                 {  $oldObject{$i} = int($1); }
+                 else
+                 {  $nr++;
+                    $oldObject{'xref' . "$nr"} = int($1);
+                 }
+              } 
+           }
+           $i++;
+        }
+        undef $antal;
+        undef $inrad;
+        sysread INFIL, $c, 1;
+        while ($c =~ m!\s!s)   
+        {  sysread INFIL, $c, 1; }
+
+        while ( (defined $c)
+        &&   ($c ne "\n")
+        &&   ($c ne "\r") )   
+        {    $inrad .= $c;
+             sysread INFIL, $c, 1;
+        }
+        if ($inrad =~ m'^(\d+)\s+(\d+)'o)
+        {   $i     = $1;
+            $antal = $2;
+        }
+
+    }
+             
+    while ($inrad)
+    {   if ($buf =~ m'Encrypt'o)
+        {  errLog("The file $infil is encrypted, cannot be used, aborts");
+        }
+        if ((! $root) && ($buf =~ m'\/Root\s+(\d+) \d+ R'so))
+        {  $root = $1;
+           if ($xref)
+           { last; }
+        }
+
+        if ((! $xref) && ($buf =~ m'\/Prev\s+(\d+)\D'so))
+        {  $xref = $1;
+           if ($root)
+           { last; }
+        }
+                
+        if ($buf =~ m'xref'so)
+        {  last; }
+                
+        sysread INFIL, $inrad, 30;
+        $buf .= $inrad;
+    }
+    return ($xref, $root, $nr);
+}
+ 
+sub getObject
+{   my ($nr, $noId, $noEnd) = @_;
+    
+    my $buf;
+    my ($offs, $siz, $embedded) = @{$oldObject{$nr}};
+    
+    if ($offs)
+    {  sysseek INFIL, $offs, 0;
+       sysread INFIL, $buf, $siz;
+       if (($noId) && ($noEnd))
+       {   if ($buf =~ m'^\d+ \d+ obj\s*(.*)endobj'os)
+           {   if (wantarray)
+               {   return ($1, $offs, $siz, $embedded);
+               }
+               else
+               {   return $1;
+               } 
+           }
+       }
+       elsif ($noId)
+       {   if ($buf =~ m'^\d+ \d+ obj\s*(.*)'os)
+           {   if (wantarray)
+               {   return ($1, $offs, $siz, $embedded);
+               }
+               else
+               {   return $1;
+               } 
+           }
+       }
+       if (wantarray)
+       {   return ($buf, $offs, $siz, $embedded)
+       }
+       else
+       {   return $buf;
+       } 
+    }
+    elsif (exists $unZipped{$nr})
+    {  ;
+    }
+    elsif ($embedded)
+    {   unZipPrepare($embedded);
+    }
+    if ($noEnd)
+    {   if (wantarray)
+        {   return ($unZipped{$nr}, $offs, $siz, $embedded)
+        }
+        else
+        {   return $unZipped{$nr};
+        }
+    }
+    else
+    {   if (wantarray)
+        {   return ("$unZipped{$nr} endobj", $offs, $siz, $embedded)
+        }
+        else
+        {   return "$unZipped{$nr} endobj";
+        }
+    } 
+}
+
+sub getKnown
+{   my ($p, $nr) = @_;
+    my ($del1, $del2);
+    my @objData = @{$$$p[0]->{$nr}};
+    if (defined $objData[oSTREAMP])
+    {  sysseek INFIL, ($objData[oNR][0] + $objData[oPOS]), 0;
+       sysread INFIL, $del1, ($objData[oSTREAMP] - $objData[oPOS]);
+       sysread INFIL, $del2, ($objData[oNR][1]   - $objData[oSTREAMP]);
+    }
+    else
+    {  $del1 = getObject($nr, 1);
+    }
+    return (\$del1, \$del2, $objData[oKIDS], $objData[oTYPE]);
+}
+
+
+sub unZipPrepare
+{  my $nr = shift;
+   my $buf = getObject($nr);
+   my (%param, $stream, $str);
+   
+   if ($buf =~ m'^(\d+ \d+ obj\s*<<[\w\d\/\s\[\]<>]+)stream\b'os)
+   {  $str  = $1;
+      my $offs = length($str) + 7;
+      if (substr($buf, $offs, 1) eq "\n")
+      {  $offs++;
+      }
+
+      for (split('/',$str))
+      {  if ($_ =~ m'^(\w+)(.*)'o)
+         {  $param{$1} = $2 || ' ';
+         }
+      }
+      $stream = substr($buf, $offs, $param{'Length'});
+      my $x = inflateInit()
+           || die "Cannot create an inflation stream\n";
+      my ($output, $status) = $x->inflate($stream);
+      die "inflation failed\n"
+                     unless $status == 1;
+
+      my $first = $param{'First'};
+      my @oOffsets = (substr($output, 0, $first) =~ m'(\d+)\b'osg);
+      my $i = 0;
+      my $j = 1;
+      my $bytes;
+      while ($oOffsets[$i])
+      {  my $k = $j + 2;
+         if ($oOffsets[$k])
+         {  $bytes = $oOffsets[$k] - $oOffsets[$j];
+         }
+         else 
+         {  $bytes = length($output) - $first - $oOffsets[$j];
+         }         
+         $unZipped{$oOffsets[$i]} = substr($output,($first + $oOffsets[$j]), $bytes); 
+         $i += 2;
+         $j += 2;
+      }
+   }
+}
+         
 ############################################
 # En definitionerna för en sida extraheras
 ############################################
@@ -3130,18 +3389,15 @@ sub offSetSizes
 sub getPage
 {  my ($fil, $sidnr, $action)  = @_;
 
-   my ($res, $i, $referens,$objNrSaved,$validStream,
-       @underObjekt, @sidObj, $strPos, $startSida, $sidor, $filId);
+   my ($res, $i, $referens,$objNrSaved,$validStream, $formRes, @objData,
+       @underObjekt, @sidObj, $strPos, $startSida, $sidor, $filId, $del1, $del2,
+       $offs, $siz, $embedded);
    my $sidAcc = 0;
-
-   $seq       = 0;
+   my $seq    = 0;
    $imSeq     = 0;
    @skapa     = ();   
    undef $formCont;
    undef $obj;
-   undef $formRes;
-   undef $resOffset;
-   undef $resLength;
    undef $AcroForm;
    undef $Annots;
    undef $Names;
@@ -3174,19 +3430,16 @@ sub getPage
    if ($infil ne $lastFile)
    {  $lastFile = $infil;
       %oldObject = ();
-      @size      = ();   
-      $root = offSetSizes($stati[7]);
+      %unZipped  = ();   
+      $root = xRefs($stati[7]);
    }
 
    #############
    # Hitta root
    #############           
 
-   my $offSet = $oldObject{$root};
-   my $bytes   = $size[$root];
-   my $objektet;
-   $res = sysseek INFIL, $offSet, 0;
-   sysread INFIL, $objektet, $bytes;
+   my $objektet = getObject($root);;
+   
    if ($sidnr == 1) 
    {  if ($objektet =~ m'/AcroForm(\s+\d+ \d+ R)'so)
       {  $AcroForm = $1;
@@ -3217,20 +3470,16 @@ sub getPage
       }
    }
      
-   
    #
    # Hitta pages
    #
  
    if ($objektet =~ m'/Pages\s+(\d+) \d+ R'os)
-   {  $offSet = $oldObject{$1};
-      $bytes   = $size[$1];
-      $res  = sysseek INFIL, $offSet, 0;
-      sysread INFIL, $objektet, $bytes;
+   {  $objektet = getObject($1);
       if ($objektet =~ m'/Count\s+(\d+)'os)
       {  $sidor = $1;
          if ($sidnr <= $sidor)
-         {  kolla($objektet, $offSet); 
+         {  $formRes = kolla($objektet); 
          }
          if ($sidor > 1)
          {   undef $AcroForm;
@@ -3259,15 +3508,12 @@ sub getPage
       @sidObj     = ();
       $bryt1++;
       for my $uO (@underObjekt)
-      {  $offSet = $oldObject{$uO};
-         $bytes   = $size[$uO];
-         $res  = sysseek INFIL, $offSet, 0;
-         sysread INFIL, $objektet, $bytes;
+      {  $objektet = getObject($uO);
          if ($objektet =~ m'/Count\s+(\d+)'os)
          {  if (($sidAcc + $1) < $sidnr)
             {  $sidAcc += $1; }
             else
-            {  kolla($objektet, $offSet, $validStream);
+            {  $formRes = kolla($objektet, $formRes);
                if ($objektet =~ m'/Kids\s*\[([^\]]+)'os)
                {  $vektor = $1; } 
                while ($vektor =~ m'(\d+) \d+ R'gso)
@@ -3286,7 +3532,7 @@ sub getPage
       {  last; } 
    }    
 
-   $validStream = kolla($objektet, $offSet);
+   ($formRes, $validStream) = kolla($objektet, $formRes);
    $startSida = $seq;
        
    if ($sidor == 1)
@@ -3322,8 +3568,7 @@ sub getPage
    }
 
    $rform = \$form{$fSource};
-   @$$rform[fRESOFFSET]  = $resOffset;
-   @$$rform[fRESLENGTH]  = $resLength;
+   @$$rform[fRESOURCE]  = $formRes;
    my @BBox;
    if (defined $formBox[0])
    {  $BBox[0] = $formBox[0]; }
@@ -3349,19 +3594,17 @@ sub getPage
 
    if ($formCont) 
    {   $seq = $formCont;
-       sysseek INFIL, $oldObject{$formCont}, 0;
-       sysread INFIL, $objektet, $size[$formCont];
+       ($objektet, $offs, $siz, $embedded) = getObject($seq);
+       
        $robj  = \$$$rform[fOBJ]->{$seq};
-   
-       $$$robj[oFORM]    = 'Y';
+       @{$$$robj[oNR]} = ($offs, $siz, $embedded);
+       $$$robj[oFORM] = 'Y';
        $form{$fSource}[fMAIN] = $seq;
        if ($objektet =~ m'^(\d+ \d+ obj\s*<<)(.+)(>>\s*stream)'so)
        {  $del1   = $2;
-          $strPos = length($2) + length($3);
-          $$$robj[oPOS]     = $oldObject{$formCont} + length($1);
-          $$$robj[oSIZE]    = $size[$formCont]      - length($1);      
-          $$$robj[oSTREAMP] = $strPos;
-          $strPos += length($1);          
+          $strPos           = length($1) + length($2) + length($3);
+          $$$robj[oPOS]     = length($1);      
+          $$$robj[oSTREAMP] = $strPos; 
           my $nyDel1;
           $nyDel1 = '<</Type/XObject/Subtype/Form/FormType 1'; 
           $nyDel1 .= "/Resources $formRes" .
@@ -3393,29 +3636,26 @@ sub getPage
    {  $formRes =~ s/\b(\d+) \d+ R\b/xform() . ' 0 R'/oegs;
    } 
       
+   my $preLength;
    while (scalar @skapa)
    {  my @process = @skapa;
       @skapa = ();
-      for my $key (@process)
+      for (@process)
       {  my $Font;
-         my $gammal = $$key[0];
-         my $ny     = $$key[1];
-         sysseek INFIL, $oldObject{$gammal}, 0;
-         sysread INFIL, $objektet, $size[$gammal];
-         $robj  = \$$$rform[fOBJ]->{$gammal};
-               
+         my $gammal = $$_[0];
+         my $ny     = $$_[1];
+         ($objektet, $offs, $siz, $embedded)  = getObject($gammal);
+         $robj      = \$$$rform[fOBJ]->{$gammal};
+         @{$$$robj[oNR]} = ($offs, $siz, $embedded);      
          if ($objektet =~ m'^(\d+ \d+ obj\s*<<)(.+)(>>\s*stream)'os)
-         {  $del1 = $2;
-            $strPos = length($2) + length($3);
-            $$$robj[oPOS]     = $oldObject{$gammal} + length($1);
-            $$$robj[oSIZE]    = $size[$gammal]      - length($1);
+         {  $del1             = $2;
+            $strPos           = length ($1) + length($2) + length($3);
+            $$$robj[oPOS]     = length($1);
             $$$robj[oSTREAMP] = $strPos;
-            $strPos += length($1);
  
             ######## En bild ########
             if ($del1 =~ m'/Subtype\s*/Image'so)
             {  $imSeq++;
-               $$$robj[oIMAGE]   = 'Y';
                $$$robj[oIMAGENR] = $imSeq;
                push @{$$$rform[fIMAGES]}, $gammal;
 
@@ -3429,54 +3669,56 @@ sub getPage
             { $$$robj[oKIDS] = 1; }            
             if ($action eq 'print')
             {   $objekt[$ny] = $pos;
-                $utrad = "$ny 0 obj\n<<" . "$del1" . '>>stream';
+                $utrad  = "$ny 0 obj\n<<" . "$del1" . '>>stream';
                 $del2   = substr($objektet, $strPos);
                 $utrad .= $del2; 
             }
          }
          else
-         {  if ($objektet =~ m'^(\d+ \d+ obj)'os)
-            {  my $preLength = length($1);
-               $$$robj[oPOS]   = $oldObject{$gammal}  + $preLength;
-               $$$robj[oSIZE]  = $size[$gammal]       - $preLength;               
-               $objektet = substr($objektet, $preLength);
-               $res = ($objektet =~ s/\b(\d+) \d+ R\b/xform() . ' 0 R'/oegs);
-               if ($res)
-               { $$$robj[oKIDS] = 1; }
-               if ($objektet =~ m'/Subtype\s*/Image'so)
-               {  $imSeq++;
-                  $$$robj[oIMAGENR] = $imSeq;
-                  push @{$$$rform[fIMAGES]}, $gammal;
-                  ###################################
-                  # Sparar dimensionerna för bilden
-                  ###################################
-                  if ($del1 =~ m'/Width\s+(\d+)'os)
-                  {  $$$robj[oWIDTH] = $1; }
+         {  if ($objektet =~ m'^(\d+ \d+ obj\s*)'os)
+            {  $preLength = length($1);
+               $$$robj[oPOS] = $preLength;               
+               $objektet     = substr($objektet, $preLength);
+            }
+            else
+            {  $$$robj[oPOS] = 0;
+            }
+            $res = ($objektet =~ s/\b(\d+) \d+ R\b/xform() . ' 0 R'/oegs);
+            if ($res)
+            { $$$robj[oKIDS] = 1; }
+            if ($objektet =~ m'/Subtype\s*/Image'so)
+            {  $imSeq++;
+               $$$robj[oIMAGENR] = $imSeq;
+               push @{$$$rform[fIMAGES]}, $gammal;
+               ###################################
+               # Sparar dimensionerna för bilden
+               ###################################
+               if ($del1 =~ m'/Width\s+(\d+)'os)
+               {  $$$robj[oWIDTH] = $1; }
       
-                  if ($del1 =~ m'/Height\s+(\d+)'os)
-                  {  $$$robj[oHEIGHT] = $1; }
-               }
-               elsif ($objektet =~ m'/BaseFont\s*/([^\s\/]+)'os)
-               {  $Font = $1;
-                  $$$robj[oTYPE]    = 'Font';
-                  $$$robj[oNAME]    = $Font;
-                  if (! exists $font{$Font})
-                  {  $fontNr++;
-                     $font{$Font}[foINTNAMN]          = 'Ft' . $fontNr;
-                     $font{$Font}[foORIGINALNR]       = $gammal;
-                     $fontSource{$Font}[foSOURCE]     = $fSource;
-                     $fontSource{$Font}[foORIGINALNR] = $gammal;
-                     if ($action eq 'print')
-                     {   $font{$Font}[foREFOBJ]   = $ny;
-                         $objRef{'Ft' . $fontNr} = $ny;
-                     }
-                  }   
-               }
+               if ($del1 =~ m'/Height\s+(\d+)'os)
+               {  $$$robj[oHEIGHT] = $1; }
+            }
+            elsif ($objektet =~ m'/BaseFont\s*/([^\s\/]+)'os)
+            {  $Font = $1;
+               $$$robj[oTYPE] = 'Font';
+               $$$robj[oNAME] = $Font;
+               if (! exists $font{$Font})
+               {  $fontNr++;
+                  $font{$Font}[foINTNAMN]          = 'Ft' . $fontNr;
+                  $font{$Font}[foORIGINALNR]       = $gammal;
+                  $fontSource{$Font}[foSOURCE]     = $fSource;
+                  $fontSource{$Font}[foORIGINALNR] = $gammal;
+                  if ($action eq 'print')
+                  {   $font{$Font}[foREFOBJ]   = $ny;
+                      $objRef{'Ft' . $fontNr} = $ny;
+                  }
+               }   
+            }
                
-               if ($action eq 'print')
-               {   $objekt[$ny] = $pos;
-                   $utrad = "$ny 0 obj\n$objektet";
-               }
+            if ($action eq 'print')
+            {   $objekt[$ny] = $pos;
+                $utrad = "$ny 0 obj $objektet";
             }
          }
          if ($action eq 'print')
@@ -3548,21 +3790,17 @@ sub getPage
       while (scalar @skapa)
       {  my @process = @skapa;
          @skapa = ();
-         for my $key (@process)
-         {  my $gammal = $$key[0];
-            my $ny     = $$key[1];
-            sysseek INFIL, $oldObject{$gammal}, 0;
-            sysread INFIL, $objektet, $size[$gammal];
-            
+         for (@process)
+         {  my $gammal = $$_[0];
+            my $ny     = $$_[1];
+            ($objektet, $offs, $siz, $embedded) = getObject($gammal);
             $robj  = \$$$ref[fOBJ]->{$gammal};
+            @{$$$robj[oNR]} = ($offs, $siz, $embedded);
             if ($objektet =~ m'^(\d+ \d+ obj\s*<<)(.+)(>>\s*stream)'os)
-            {  $del1 = $2;
-               $strPos = length($2) + length($3);
-               $$$robj[oPOS]   = $oldObject{$gammal} + length($1);
-               $$$robj[oSIZE]  = $size[$gammal]      - length($1);
-               $$$robj[oSTREAMP] = $strPos;
-               $strPos += length($1);
-   
+            {  $del1             = $2;
+               $$$robj[oPOS]     = length($1);
+               $$$robj[oSTREAMP] = length($1) + length($2) + length($3);
+                  
                $res = ($del1 =~ s/\b(\d+) \d+ R\b/xform() . ' 0 R'/oegs);
                if ($res)
                { $$$robj[oKIDS] = 1; }  
@@ -3570,22 +3808,9 @@ sub getPage
             else
             {  if ($objektet =~ m'^(\d+ \d+ obj)'os)
                {  my $preLength = length($1);
-                  $$$robj[oPOS]   = $oldObject{$gammal}  + $preLength;
-                  $$$robj[oSIZE]  = $size[$gammal]       - $preLength;
+                  $$$robj[oPOS] = $preLength;
                   $objektet = substr($objektet, $preLength);
-                  #if ($objektet =~ m'/BaseFont\s*/([^\s\/]+)'os)
-                  #{  $Font = $1;
-                  #   $$$robj[oTYPE]    = 'Font';
-                  #   $$$robj[oNAME]    = $Font;
-                  #   if (! exists $font{$Font})
-                  #   {  $fontNr++;
-                  #      $font{$Font}[foINTNAMN]  = 'Ft' . $fontNr;
-                  #      $fontSource{$Font}       = $fSource;
-                  #      $font{$Font}[fREFOBJ]    = $ny;
-                  #      $objRef{'Ft' . $fontNr} = $ny;
-                  #   }
-                  #}   
-                  
+                                 
                   $res = ($objektet =~ s/\b(\d+) \d+ R\b/xform() . ' 0 R'/oegs);
                   if ($res)
                   { $$$robj[oKIDS] = 1; }
@@ -3622,12 +3847,11 @@ sub kolla
 {  #
    # Resurser
    #
-   my $obj    = shift;
-   my $offSet = shift;
+   my $obj       = shift;
+   my $resources = shift;
    my $valid;
-   
- 
-   if ($obj =~ m'MediaBox\s*\[\s*(\-*\d+)\s+(\-*\d+)\s+(\-*\d+)\s+(\-*\d+)'os)
+    
+   if ($obj =~ m'MediaBox\s*\[\s*([\-\.\d]+)\s+([\-\.\d]+)\s+([\-\.\d]+)\s+([\-\.\d]+)'os)
    { $formBox[0] = $1;
      $formBox[1] = $2;
      $formBox[2] = $3;
@@ -3644,20 +3868,19 @@ sub kolla
    }
    
    if ($obj =~ m'^(.+/Resources)'so)
-   {  $resOffset = $offSet + length($1);
-      if ($obj =~ m'Resources(\s+\d+ \d+ R)'os)   # Hänvisning
-      {  $formRes = $1; }
+   {  if ($obj =~ m'Resources(\s+\d+ \d+ R)'os)   # Hänvisning
+      {  $resources = $1; }
       else                 # Resurserna är ett dictionary. Hela kopieras
       {  my $dummy;
          my $i;
          my $k;
-         undef $formRes;
+         undef $resources;
          ($dummy, $obj) = split /\/Resources/, $obj;
          $obj =~ s/\<\</\#\<\</gs;
          $obj =~ s/\>\>/\>\>\#/gs;
          my @ord = split /\#/, $obj;
          for ($i = 0; $i <= $#ord; $i++)
-         {   $formRes .= $ord[$i];
+         {   $resources .= $ord[$i];
              if ($ord[$i] =~ m'\S+'s)
              {  if ($ord[$i] =~ m'<<'s)
                 {  $k++; }
@@ -3668,10 +3891,8 @@ sub kolla
              } 
           }
        }
-    $resLength = length($formRes);
     }
-    return $valid;
-
+    return ($resources, $valid);
 }
 
 ##############################
@@ -3682,12 +3903,9 @@ sub byggForm
 {  no warnings; 
    my ($infil, $sidnr) = @_;
    
-   my $res;
-   my $corr;
-   my $nyDel1;
+   my ($res, $corr, $nyDel1, $formRes, $del1, $del2, $kids, $typ);
    undef $nr;
-   @skapa = ();
-   
+      
    my $fSource = $infil . '_' . $sidnr;
    my @stati = stat($infil);
 
@@ -3717,68 +3935,54 @@ sub byggForm
    open (INFIL, "<$infil") || errLog("The file $infil couldn't be opened, aborting $!");
    binmode INFIL;
 
-   ###########################################################
-   # Data kopieras till två enklare strukturer för att slippa  
-   # alltför komplicerade referenser
-   ###########################################################
-
-   my %oHash = %{$form{$fSource}[0]};                 # Objekt hash
-  
-   my @fData;
-
-   push @fData, (0, @{$form{$fSource}}[1..9]);      # Data om formuläret   
+   if ($infil ne $lastFile)
+   {  $lastFile = $infil;
+      %unZipped  = ();   
+   }
 
    ####################################################
    # Objekt utan referenser  kopieras och skrivs
    ####################################################   
 
-   for my $key (@{$fData[fNOKIDS]})
+   for my $key (@{$form{$fSource}->[fNOKIDS]})
    {   if ((defined $old{$key}) && ($objekt[$old{$key}]))    # already processed
        {  next;
        }
-       #########################################
-       # Vektorn med data om ett objekt kopieras
-       #########################################
-       
-       my @oD = @{$oHash{$key}};   
-
+              
        if (! defined $old{$key})
        {  $old{$key} = ++$objNr;
        }
        $nr = $old{$key};
-       
        $objekt[$nr] = $pos;
-       
-       sysseek INFIL, $oD[oPOS], 0;
-       sysread INFIL, $del1, $oD[oSIZE];
-       
-       if (defined $oD[oSTREAMP])
-       {  $utrad = "$nr 0 obj\n<<" . $del1; }
-       else
-       {  if ($oD[oTYPE] eq 'Font')
-          {  my $Font = $oD[oNAME];
-             if (! defined $font{$Font}[foINTNAMN])
-             {  $fontNr++;
-                $font{$Font}[foINTNAMN]  = 'Ft' . $fontNr;
-                $font{$Font}[foREFOBJ]   = $nr;
-                $objRef{'Ft' . $fontNr}  = $nr;
-             }
-          }   
-          
-          $utrad = "$nr 0 obj" . $del1;     
+     
+       ($del1, $del2, $kids, $typ) = getKnown(\$form{$fSource},$key);
+             
+       if ($typ eq 'Font')
+       {  my $Font = ${$form{$fSource}}[0]->{$key}->[oNAME];
+          if (! defined $font{$Font}[foINTNAMN])
+          {  $fontNr++;
+             $font{$Font}[foINTNAMN]  = 'Ft' . $fontNr;
+             $font{$Font}[foREFOBJ]   = $nr;
+             $objRef{'Ft' . $fontNr}  = $nr;
+          }
        }
+       if (! defined $$del2)
+       {   $utrad = "$nr 0 obj " . $$del1;
+       }
+       else
+       {   $utrad = "$nr 0 obj\n<<" . $$del1 . $$del2;
+       }     
        $pos += syswrite UTFIL, $utrad;     
    }
 
    #######################################################
    # Objekt med referenser kopieras, behandlas och skrivs
    #######################################################
-   for my $key (@{$fData[fKIDS]})
+   for my $key (@{$form{$fSource}->[fKIDS]})
    {   if ((defined $old{$key}) && ($objekt[$old{$key}]))  # already processed
        {  next;
        }
-       my @oD = @{$oHash{$key}};
- 
+        
        if (! defined $old{$key})
        {  $old{$key} = ++$objNr;
        }
@@ -3786,32 +3990,27 @@ sub byggForm
        
        $objekt[$nr] = $pos;
        
-       if (defined $oD[oSTREAMP])
-       {  sysseek INFIL, $oD[oPOS], 0;
-          sysread INFIL, $del1, $oD[oSTREAMP];
-          $del1 =~ s/\b(\d+) \d+ R\b/translate() . ' 0 R'/oegs;
-          
-          sysseek INFIL, ($oD[oPOS]  + $oD[oSTREAMP]), 0;
-          sysread INFIL, $del2, ($oD[oSIZE] - $oD[oSTREAMP]);
-           
-          $utrad = "$nr 0 obj\n<<" . $del1 . $del2;
+       ($del1, $del2, $kids, $typ) = getKnown(\$form{$fSource},$key);
+
+       $$del1 =~ s/\b(\d+) \d+ R\b/translate() . ' 0 R'/oegs;
+       
+       if (defined $$del2)          
+       {  $utrad = "$nr 0 obj\n<<" . $$del1 . $$del2;
        }
        else
-       {  sysseek INFIL, $oD[oPOS], 0;
-          sysread INFIL, $del1, $oD[oSIZE];
-          if (($oD[oTYPE]) && ($oD[oTYPE] eq 'Font'))
-          {  my $Font = $oD[oNAME];
-             if (! defined $font{$Font}[foINTNAMN])
-             {  $fontNr++;
-                $font{$Font}[foINTNAMN]  = 'Ft' . $fontNr;
-                $font{$Font}[foREFOBJ]   = $nr;
-                $objRef{'Ft' . $fontNr} = $nr;
-             }
-          }   
-
-          $del1 =~ s/\b(\d+) \d+ R\b/translate() . ' 0 R'/oegs;
-          $utrad = "$nr 0 obj" . $del1;
-       }
+       {  $utrad = "$nr 0 obj " . $$del1;
+       } 
+       
+       if (($typ) && ($typ eq 'Font'))
+       {  my $Font = $form{$fSource}[0]->{$key}->[oNAME];
+          if (! defined $font{$Font}[foINTNAMN])
+          {  $fontNr++;
+             $font{$Font}[foINTNAMN]  = 'Ft' . $fontNr;
+             $font{$Font}[foREFOBJ]   = $nr;
+             $objRef{'Ft' . $fontNr} = $nr;
+          }
+       }   
+       
        $pos += syswrite UTFIL, $utrad;                
    }
 
@@ -3819,7 +4018,7 @@ sub byggForm
    # Formulärobjektet behandlas 
    #################################
    
-   my $key = $fData[fMAIN];
+   my $key = $form{$fSource}->[fMAIN];
    if (! defined $key)
    {  return undef;
    }
@@ -3830,59 +4029,33 @@ sub byggForm
       return $old{$key}; 
    }
 
-   my @oD = @{$oHash{$key}};
-
    $nr = ++$objNr;
    
    $objekt[$nr] = $pos;
+   
+   $formRes = $form{$fSource}->[fRESOURCE];   
+    
+   ($del1, $del2) = getKnown(\$form{$fSource}, $key);  
 
-   sysseek INFIL, $fData[fRESOFFSET], 0;
-   sysread INFIL, $formRes, $fData[fRESLENGTH];
-       
-   if (defined $oD[oSTREAMP])
-   {  sysseek INFIL, $oD[oPOS], 0;
-      sysread INFIL, $del1, $oD[oSTREAMP];
-  
-      $nyDel1 = '<</Type/XObject/Subtype/Form/FormType 1'; 
-      $nyDel1 .= "/Resources $formRes" .
+   $nyDel1 = '<</Type/XObject/Subtype/Form/FormType 1'; 
+   $nyDel1 .= "/Resources $formRes" .
                  '/BBox [' .
-                 $fData[fBBOX][0]  . ' ' .
-                 $fData[fBBOX][1]  . ' ' .
-                 $fData[fBBOX][2]  . ' ' .
-                 $fData[fBBOX][3]  . ' ]' .  
+                 $form{$fSource}->[fBBOX]->[0]  . ' ' .
+                 $form{$fSource}->[fBBOX]->[1]  . ' ' .
+                 $form{$fSource}->[fBBOX]->[2]  . ' ' .
+                 $form{$fSource}->[fBBOX]->[3]  . ' ]' .  
                  # "\]/Matrix \[ $sX 0 0 $sX $tX $tY \]" .
-                 $del1;
-      $nyDel1 =~ s/\b(\d+) \d+ R\b/translate() . ' 0 R'/oegs;
+                 $$del1;
+   $nyDel1 =~ s/\b(\d+) \d+ R\b/translate() . ' 0 R'/oegs;
 
-      sysseek INFIL, ($oD[oPOS]  + $oD[oSTREAMP]), 0;
-      sysread INFIL, $del2, ($oD[oSIZE] - $oD[oSTREAMP]);
-
-      $utrad = "$nr 0 obj" . $nyDel1 . $del2;
-   }
-   else
-   {  sysseek INFIL, $oD[oPOS], 0;
-      sysread INFIL, $del1, $oD[oSIZE];
-
-      $nyDel1 = '<</Type/XObject/Subtype/Form/FormType 1'; 
-      $nyDel1 .= "/Resources $formRes" .
-                '/BBox [' .
-                 "$fData[fBBOX][0] " .
-                 "$fData[fBBOX][1] " .
-                 "$fData[fBBOX][2] " .
-                 "$fData[fBBOX][3] " . ']' .
-                 # ']/Matrix [ 1 0 0 1 0 0 ]' .
-                  $del1 . '>>';
-      $nyDel1 =~ s/\b(\d+) \d+ R\b/translate() . ' 0 R'/oegs;
-      $utrad = "$nr 0 obj" . $nyDel1;
-   }
-   $pos += syswrite UTFIL, $utrad;           
-         
+   $utrad = "$nr 0 obj" . $nyDel1 . $$del2;
+   
+   $pos += syswrite UTFIL, $utrad;                    
    close INFIL;
 
    %{$processed{$infil}} = %old;
 
    return $nr;   
-   
 }
 
 ##################
@@ -3897,9 +4070,7 @@ sub getImage
    
    @skapa = ();
    undef $nr;
-   my $res;
-   my $corr;
-   my $nyDel1;
+   my ($res, $corr, $nyDel1, $del1, $del2);
    my $fSource = $infil . '_' . $sidnr;
    my $iSource = $fSource . '_' . $bildnr;
   
@@ -3923,8 +4094,12 @@ sub getImage
    open (INFIL, "<$infil") || errLog("The file $infil couldn't be opened, $!");
    binmode INFIL; 
 
-   my %oHash = %{$form{$fSource}[0]};                 # Objekt hash
-      
+   if ($infil ne $lastFile)
+   {  $lastFile = $infil;
+      %unZipped  = ();
+   }
+
+    
    #########################################################
    # En bild med referenser kopieras, behandlas och skrivs
    #########################################################
@@ -3934,20 +4109,14 @@ sub getImage
    
    $objekt[$nr] = $pos;
 
-   my @oD = @{$oHash{$key}};
-       
-   $res = sysseek INFIL, $oD[oPOS], 0;
-       
-   if (defined $oD[oSTREAMP])
-   {  $corr = sysread INFIL, $del1, $oD[oSTREAMP];
-      $del1 =~ s/\b(\d+) \d+ R\b/xform() . ' 0 R'/oegs;
-      $res = sysread INFIL, $del2, ($oD[oSIZE] - $corr); 
-      $utrad = "$nr 0 obj\n<<" . $del1 . $del2;
+   ($del1, $del2) = getKnown(\$form{$fSource}, $key);
+
+   $$del1 =~ s/\b(\d+) \d+ R\b/xform() . ' 0 R'/oegs;      
+   if (defined $$del2)
+   {  $utrad = "$nr 0 obj\n<<" . $$del1 . $$del2;
    }
    else
-   {  $res = sysread INFIL, $del1, $oD[oSIZE];
-      $del1 =~ s/\b(\d+) \d+ R\b/xform() . ' 0 R'/oegs;
-      $utrad = "$nr 0 obj" . $del1;
+   {  $utrad = "$nr 0 obj " . $$del1;
    }
    $pos += syswrite UTFIL, $utrad;
    ##################################
@@ -3956,23 +4125,18 @@ sub getImage
    while (scalar @skapa)
    {  my @process = @skapa;
       @skapa = ();
-      for my $key (@process)
-      {  my $gammal = $$key[0];
-         my $ny     = $$key[1];
+      for (@process)
+      {  my $gammal = $$_[0];
+         my $ny     = $$_[1];
 
-         my @oD = @{$oHash{$gammal}};
+         ($del1, $del2) = getKnown(\$form{$fSource}, $gammal);
 
-         $res = sysseek INFIL, $oD[oPOS], 0;
-         if (defined $oD[oSTREAMP])
-         {  $corr = sysread INFIL, $del1, $oD[oSTREAMP];
-            $del1 =~ s/\b(\d+) \d+ R\b/xform() . ' 0 R'/oegs;
-            $res = sysread INFIL, $del2, ($oD[oSIZE] - $corr); 
-            $utrad = "$ny 0 obj\n<<" . $del1 . $del2;
+         $$del1 =~ s/\b(\d+) \d+ R\b/xform() . ' 0 R'/oegs;      
+         if (defined $$del2)
+         {  $utrad = "$ny 0 obj\n<<" . $$del1 . $$del2;
          }
          else
-         {  $res = sysread INFIL, $del1, $oD[oSIZE];
-            $del1 =~ s/\b(\d+) \d+ R\b/xform() . ' 0 R'/oegs;
-            $utrad = "$ny 0 obj" . $del1;
+         {  $utrad = "$ny 0 obj " . $$del1;
          }
          $objekt[$ny] = $pos;
          $pos += syswrite UTFIL, $utrad;
@@ -3999,9 +4163,7 @@ sub AcroFormsEtc
    undef $AcroForm;
    @skapa = ();
    
-   my $res;
-   my $corr;
-   my $nyDel1;
+   my ($res, $corr, $nyDel1, @objData, $del1, $del2);
    my $fSource = $infil . '_' . $sidnr;
    
    if (exists $processed{$infil})
@@ -4020,43 +4182,37 @@ sub AcroFormsEtc
    open (INFIL, "<$infil") || errLog("The file $infil couldn't be opened, aborting $!");
    binmode INFIL;
 
-   ###########################################################
-   # Data kopieras till två enklare strukturer för att slippa  
-   # komplicerade referenser
-   ###########################################################
+   if ($infil ne $lastFile)
+   {  $lastFile = $infil;
+      %unZipped  = ();
+   }
 
-   my %oHash = %{$intAct{$fSource}[0]};         # Objekt hash
-  
-   my @iData;
-
-   push @iData, (0, @{$intAct{$fSource}}[1..8]);      # Data om interaktivitet
-
-   my $fdSidnr = $iData[iSTARTSIDA];
+   my $fdSidnr = $intAct{$fSource}[iSTARTSIDA];
    $old{$fdSidnr} = $sidObjNr;
 
-   if (($iData[iNAMES]) ||(scalar @jsfiler) || (scalar @inits) || (scalar %fields))
-   {  $Names  = behandlaNames($iData[iNAMES], $fSource);
+   if (($intAct{$fSource}[iNAMES]) ||(scalar @jsfiler) || (scalar @inits) || (scalar %fields))
+   {  $Names  = behandlaNames($intAct{$fSource}[iNAMES], $fSource);
    }
    
    ##################################
    # Referenser behandlas och skrivs
    ##################################
          
-   if (defined $iData[iACROFORM])
-   {   $AcroForm = $iData[iACROFORM];
+   if (defined $intAct{$fSource}[iACROFORM])
+   {   $AcroForm = $intAct{$fSource}[iACROFORM];
        $AcroForm =~ s/\b(\d+) \d+ R/xform() . ' 0 R'/oeg;
    }
-   if (defined $iData[iAAROOT])
-   {  $AARoot = $iData[iAAROOT];
+   if (defined $intAct{$fSource}[iAAROOT])
+   {  $AARoot = $intAct{$fSource}[iAAROOT];
       $AARoot =~ s/\b(\d+) \d+ R/xform() . ' 0 R'/oeg;
    }
    
-   if (defined $iData[iAAPAGE])
-   {   $AAPage = $iData[iAAPAGE];
+   if (defined $intAct{$fSource}[iAAPAGE])
+   {   $AAPage = $intAct{$fSource}[iAAPAGE];
        $AAPage =~ s/\b(\d+) \d+ R/xform() . ' 0 R'/oeg;
    }
-   if (defined $iData[iANNOTS])
-   {   $Annots = $iData[iANNOTS];
+   if (defined $intAct{$fSource}[iANNOTS])
+   {   $Annots = $intAct{$fSource}[iANNOTS];
        $Annots =~ s/\b(\d+) \d+ R/xform() . ' 0 R'/oeg;
    }
 
@@ -4066,29 +4222,31 @@ sub AcroFormsEtc
    while (scalar @skapa)
    {  my @process = @skapa;
       @skapa = ();
-      for my $key (@process)
-      {  
-         my $gammal = $$key[0];
-         my $ny     = $$key[1];
+      for (@process)
+      {  my $gammal = $$_[0];
+         my $ny     = $$_[1];
          
-         my @oD = @{$oHash{$gammal}};
+         my $oD   = \@{$intAct{$fSource}[0]->{$gammal}};
+         @objData = @{$$oD[oNR]};
 
-         $res = sysseek INFIL, $oD[oPOS], 0;
-         if (defined $oD[oSTREAMP])
-         {  $corr = sysread INFIL, $del1, $oD[oSTREAMP];
-            if (defined  $oD[oKIDS]) 
+         if (defined $$oD[oSTREAMP])
+         {  $res = sysseek INFIL, ($objData[0] + $$oD[oPOS]), 0;
+            $corr = sysread INFIL, $del1, ($$oD[oSTREAMP] - $$oD[oPOS]) ;
+            if (defined  $$oD[oKIDS]) 
             {   $del1 =~ s/\b(\d+) \d+ R\b/xform() . ' 0 R'/oegs;
             }
-            $res = sysread INFIL, $del2, ($oD[oSIZE] - $corr); 
+            $res = sysread INFIL, $del2, ($objData[1] - $corr); 
             $utrad = "$ny 0 obj\n<<" . $del1 . $del2;
          }
          else
-         {  $res = sysread INFIL, $del1, $oD[oSIZE];
-            if (defined  $oD[oKIDS])
+         {  $del1 = getObject($gammal);
+            $del1 = substr($del1, $$oD[oPOS]);
+            if (defined  $$oD[oKIDS])
             {   $del1 =~ s/\b(\d+) \d+ R\b/xform() . ' 0 R'/oegs;
             }
-            $utrad = "$ny 0 obj" . $del1;
+            $utrad = "$ny 0 obj " . $del1;
          }
+
          $objekt[$ny] = $pos;
          $pos += syswrite UTFIL, $utrad;
       }
@@ -4106,7 +4264,7 @@ sub AcroFormsEtc
 sub extractName
 {  my ($infil, $sidnr, $namn) = @_;
    
-   my ($res, $del1, $resType, $key, $corr);
+   my ($res, $del1, $resType, $key, $corr, $formRes, $kids);
    my $del2 = '';
    undef $nr;
    @skapa = ();
@@ -4140,30 +4298,21 @@ sub extractName
    open (INFIL, "<$infil") || errLog("The file $infil couldn't be opened, aborting $!");
    binmode INFIL;
 
-   ###########################################################
-   # Data kopieras till två enklare strukturer för att slippa  
-   # alltför komplicerade referenser
-   ###########################################################
+   if ($infil ne $lastFile)
+   {  $lastFile = $infil;
+      %unZipped  = ();
+   }
 
-   my %oHash = %{$form{$fSource}[0]};                 # Objekt hash
-  
-   my @fData;
-
-   push @fData, (0, @{$form{$fSource}}[1..9]);      # Data om formuläret   
-   
    #################################
    # Resurserna läses
    #################################
 
-   sysseek INFIL, $fData[fRESOFFSET], 0;
-   sysread INFIL, $formRes, $fData[fRESLENGTH];
+   $formRes = $form{$fSource}->[fRESOURCE];
    
    if ($formRes !~ m'<<.*>>'os)                   # If not a directory, get it
    {   if ($formRes =~ m'\b(\d+) \d+ R'o)
        {  $key   = $1;
-          my @oD = @{$oHash{$key}};
-          $res = sysseek INFIL, $oD[oPOS], 0;
-          $res = sysread INFIL, $formRes, $oD[oSIZE];
+          $formRes = getKnown(\$form{$fSource}, $key);
        }
        else
        {  return undef;
@@ -4179,13 +4328,11 @@ sub extractName
        }
    }
    if (! defined $key)                      # Try to expand the references
-   {   my $str;
+   {   my ($str, $del1, $del2);
        while ($formRes =~ m'(\/\w+)\s+(\d+) \d+ R'ogs)
        { $str .= $1 . ' ';
-         my $string;
-         my @obD = @{$oHash{$2}};
-         sysseek INFIL, $obD[oPOS], 0;
-         sysread INFIL, $string, $obD[oSIZE];
+         ($del1, $del2) = getKnown(\$form{$fSource}, $2);
+         my $string =  $$del1;
          $str .= $string . ' ';
        }
        $formRes = $str;
@@ -4204,25 +4351,14 @@ sub extractName
    #  Read the top object of the hierarchy
    ########################################
 
-   my @oD = @{$oHash{$key}};
+   ($del1, $del2) = getKnown(\$form{$fSource}, $key);
 
-   if (defined $oD[oSTREAMP])
-   {  sysseek INFIL, $oD[oPOS], 0;
-      sysread INFIL, $del1, $oD[oSTREAMP];
-        
-      sysseek INFIL, ($oD[oPOS]  + $oD[oSTREAMP]), 0;
-      sysread INFIL, $del2, ($oD[oSIZE] - $oD[oSTREAMP]);
-   }
-   else
-   {  sysseek INFIL, $oD[oPOS], 0;
-      sysread INFIL, $del1, $oD[oSIZE];
-   }
-      
-   $nr = quickxform($key);
+   $objNr++;
+   $nr = $objNr;
 
    if ($resType eq 'Font')
    {  my ($Font, $extNamn);
-      if ($del1 =~ m'/BaseFont\s*/([^\s\/]+)'os)
+      if ($$del1 =~ m'/BaseFont\s*/([^\s\/]+)'os)
       {  $extNamn = $1;
          if (! exists $font{$extNamn})
          {  $fontNr++;
@@ -4262,8 +4398,8 @@ sub extractName
       $objRef{$namn} = $nr;
    }
    elsif ($resType eq 'XObject')
-   {  if ($oD[oTYPE] == 'Image')
-      {  $namn = 'Im' . $oD[oIMAGENR];
+   {  if (defined $form{$fSource}->[0]->{$nr}->[oIMAGENR])
+      {  $namn = 'Im' . $form{$fSource}->[0]->{$nr}->[oIMAGENR];
       }
       else
       {  $formNr++;
@@ -4273,9 +4409,14 @@ sub extractName
       $objRef{$namn} = $nr;
    }
 
-   $del1 =~ s/\b(\d+) \d+ R/xform() . ' 0 R'/oeg;
+   $$del1 =~ s/\b(\d+) \d+ R/xform() . ' 0 R'/oeg;
 
-   $utrad = "$nr 0 obj" . $del1 . $del2;
+   if (defined $$del2)
+   {  $utrad = "$nr 0 obj\n<<" . $$del1 . $$del2;
+   }
+   else
+   {  $utrad = "$nr 0 obj " . $$del1;
+   }
    $objekt[$nr] = $pos;
    $pos += syswrite UTFIL, $utrad;
 
@@ -4286,27 +4427,19 @@ sub extractName
    while (scalar @skapa)
    {  my @process = @skapa;
       @skapa = ();
-      for my $key (@process)
-      {  my $gammal = $$key[0];
-         my $ny     = $$key[1];
+      for (@process)
+      {  my $gammal = $$_[0];
+         my $ny     = $$_[1];
          
-         my @oD = @{$oHash{$gammal}};
-
-         $res = sysseek INFIL, $oD[oPOS], 0;
-         if (defined $oD[oSTREAMP])
-         {  $corr = sysread INFIL, $del1, $oD[oSTREAMP];
-            if (defined  $oD[oKIDS]) 
-            {   $del1 =~ s/\b(\d+) \d+ R\b/xform() . ' 0 R'/oegs;
-            }
-            $res = sysread INFIL, $del2, ($oD[oSIZE] - $corr); 
-            $utrad = "$ny 0 obj\n<<" . $del1 . $del2;
+         ($del1, $del2, $kids) = getKnown(\$form{$fSource}, $gammal);
+         
+         $$del1 =~ s/\b(\d+) \d+ R\b/xform() . ' 0 R'/oegs 
+                                     unless (! defined $kids);      
+         if (defined $$del2)
+         {  $utrad = "$ny 0 obj\n<<" . $$del1 . $$del2;
          }
          else
-         {  $res = sysread INFIL, $del1, $oD[oSIZE];
-            if (defined  $oD[oKIDS])
-            {   $del1 =~ s/\b(\d+) \d+ R\b/xform() . ' 0 R'/oegs;
-            }
-            $utrad = "$ny 0 obj" . $del1;
+         {  $utrad = "$ny 0 obj " . $$del1;
          }
          $objekt[$ny] = $pos;
          $pos += syswrite UTFIL, $utrad;
@@ -4315,10 +4448,9 @@ sub extractName
    close INFIL;
    %{$processed{$infil}} = %old;
    return $namn;   
-   
+ 
 }
  
-
 ########################
 # Ett objekt extraheras
 ########################
@@ -4327,7 +4459,7 @@ sub extractObject
 {  no warnings;
    my ($infil, $sidnr, $key, $typ) = @_;
    
-   my ($res, $del1, $corr, $namn);
+   my ($res, $del1, $corr, $namn, $kids);
    my $del2 = '';
    undef $nr;
    @skapa = ();
@@ -4363,36 +4495,17 @@ sub extractObject
    open (INFIL, "<$infil") || errLog("The file $infil couldn't be opened, aborting $!");
    binmode INFIL;
 
-   ###########################################################
-   # Data kopieras till två enklare strukturer för att slippa  
-   # alltför komplicerade referenser
-   ###########################################################
+   if ($infil ne $lastFile)
+   {  $lastFile = $infil;
+      %unZipped  = ();   
+   }
 
-   my %oHash = %{$form{$fSource}[0]};                 # Objekt hash
-  
-   my @fData;
-
-   push @fData, (0, @{$form{$fSource}}[1..9]);      # Data om formuläret   
-      
-      
    ########################################
    #  Read the top object of the hierarchy
    ########################################
 
-   my @oD = @{$oHash{$key}};
-
-   if (defined $oD[oSTREAMP])
-   {  sysseek INFIL, $oD[oPOS], 0;
-      sysread INFIL, $del1, $oD[oSTREAMP];
+   ($del1, $del2, $kids) = getKnown(\$form{$fSource}, $key);
         
-      sysseek INFIL, ($oD[oPOS]  + $oD[oSTREAMP]), 0;
-      sysread INFIL, $del2, ($oD[oSIZE] - $oD[oSTREAMP]);
-   }
-   else
-   {  sysseek INFIL, $oD[oPOS], 0;
-      sysread INFIL, $del1, $oD[oSIZE];
-   }
-     
    if (exists $old{$key})
    {  $nr = $old{$key}; }
    else
@@ -4402,7 +4515,7 @@ sub extractObject
  
    if ($typ eq 'Font')
    {  my ($Font, $extNamn);
-      if ($del1 =~ m'/BaseFont\s*/([^\s\/]+)'os)
+      if ($$del1 =~ m'/BaseFont\s*/([^\s\/]+)'os)
       {  $extNamn = $1;
          $fontNr++;
          $Font = 'Ft' . $fontNr;
@@ -4442,8 +4555,8 @@ sub extractObject
       $objRef{$namn} = $nr;
    }
    elsif ($typ eq 'XObject')
-   {  if ($oD[oTYPE] == 'Image')
-      {  $namn = 'Im' . $oD[oIMAGENR];
+   {  if (defined $form{$fSource}->[0]->{$nr}->[oIMAGENR])
+      {  $namn = 'Im' . $form{$fSource}->[0]->{$nr}->[oIMAGENR];
       }
       else
       {  $formNr++;
@@ -4453,9 +4566,15 @@ sub extractObject
       $objRef{$namn} = $nr;
    }
 
-   $del1 =~ s/\b(\d+) \d+ R/xform() . ' 0 R'/oeg;
+   $$del1 =~ s/\b(\d+) \d+ R\b/xform() . ' 0 R'/oegs 
+                                  unless (! defined $kids);      
+   if (defined $$del2)
+   {  $utrad = "$nr 0 obj\n<<" . $$del1 . $$del2;
+   }
+   else
+   {  $utrad = "$nr 0 obj " . $$del1;
+   }
 
-   $utrad = "$nr 0 obj" . $del1 . $del2;
    $objekt[$nr] = $pos;
    $pos += syswrite UTFIL, $utrad;
 
@@ -4466,28 +4585,22 @@ sub extractObject
    while (scalar @skapa)
    {  my @process = @skapa;
       @skapa = ();
-      for my $key (@process)
-      {  my $gammal = $$key[0];
-         my $ny     = $$key[1];
+      for (@process)
+      {  my $gammal = $$_[0];
+         my $ny     = $$_[1];
          
-         my @oD = @{$oHash{$gammal}};
+         ($del1, $del2, $kids) = getKnown(\$form{$fSource}, $gammal);
 
-         $res = sysseek INFIL, $oD[oPOS], 0;
-         if (defined $oD[oSTREAMP])
-         {  $corr = sysread INFIL, $del1, $oD[oSTREAMP];
-            if (defined  $oD[oKIDS]) 
-            {   $del1 =~ s/\b(\d+) \d+ R\b/xform() . ' 0 R'/oegs;
-            }
-            $res = sysread INFIL, $del2, ($oD[oSIZE] - $corr); 
-            $utrad = "$ny 0 obj\n<<" . $del1 . $del2;
+         $$del1 =~ s/\b(\d+) \d+ R\b/xform() . ' 0 R'/oegs
+                                 unless (! defined  $kids);
+       
+         if (defined $$del2)          
+         {  $utrad = "$ny 0 obj\n<<" . $$del1 . $$del2;
          }
          else
-         {  $res = sysread INFIL, $del1, $oD[oSIZE];
-            if (defined  $oD[oKIDS])
-            {   $del1 =~ s/\b(\d+) \d+ R\b/xform() . ' 0 R'/oegs;
-            }
-            $utrad = "$ny 0 obj" . $del1;
-         }
+         {  $utrad = "$ny 0 obj " . $$del1;
+         } 
+
          $objekt[$ny] = $pos;
          $pos += syswrite UTFIL, $utrad;
       }
@@ -4504,7 +4617,7 @@ sub extractObject
 
 sub analysera
 {  my ($i, $res, @underObjekt, @sidObj, 
-       $strPos, $sidor, $filId, $Root);
+       $strPos, $sidor, $filId, $Root, $del1, $del2);
 
    my $sidAcc = 0;
    @skapa     = ();
@@ -4537,19 +4650,18 @@ sub analysera
   
    if ($lastFile ne $infil)
    {  %oldObject = ();
-      @size      = ();
-      $root      = offSetSizes($stati[7]);
+      %unZipped  = ();
+      $root      = xRefs($stati[7]);
       $lastFile  = $infil;
    }   
    #############
    # Hitta root
    #############           
 
-   my $offSet = $oldObject{$root};
-   my $bytes   = $size[$root];
-   my $objektet;
-   $res = sysseek INFIL, $offSet, 0;
-   sysread INFIL, $objektet, $bytes;
+   my $offSet;
+   my $bytes;
+   my $objektet = getObject($root);
+   
    if (! $interActive)
    {  if ($objektet =~ m'/AcroForm(\s+\d+ \d+ R)'so)
       {  $AcroForm = $1;
@@ -4596,10 +4708,7 @@ sub analysera
    #
  
    if ($objektet =~ m'/Pages\s+(\d+) \d+ R'os)
-   {  $offSet = $oldObject{$1};
-      $bytes   = $size[$1];
-      $res  = sysseek INFIL, $offSet, 0;
-      sysread INFIL, $objektet, $bytes;
+   {  $objektet = getObject($1);
       if ($objektet =~ m'/Count\s+(\d+)'os)
       {  $sidor = $1; }   
    }
@@ -4621,9 +4730,7 @@ sub analysera
    while (($li > -1) && ($sidAcc < $sidor))
    {  if (scalar @{$levels[$li]})
       {   my $j = shift @{$levels[$li]};
-          sysseek INFIL, $oldObject{$j}, 0;
-          sysread INFIL, $objektet, $size[$j];
-          
+          $objektet = getObject($j); 
           if ($objektet =~ m'/Kids\s*\[([^\]]+)'os)
           {  $vektor = $1; 
              my @sObj; 
@@ -4653,12 +4760,10 @@ sub analysera
    while (scalar @skapa)
    {  my @process = @skapa;
       @skapa = ();
-      for my $key (@process)
-      {  my $gammal = $$key[0];
-         my $ny     = $$key[1];
-         sysseek INFIL, $oldObject{$gammal}, 0;
-         sysread INFIL, $objektet, $size[$gammal];
-         
+      for (@process)
+      {  my $gammal = $$_[0];
+         my $ny     = $$_[1];
+         $objektet  = getObject($gammal);         
 
          if ($objektet =~ m'^(\d+ \d+ obj\s*<<)(.+)(>>\s*stream)'os)
          {  $del1 = $2;
@@ -4671,10 +4776,11 @@ sub analysera
 
             $pos += syswrite UTFIL, $utrad;
          }
-         
-         elsif ($objektet =~ m'^(\d+ \d+ obj)'os)
-         {  my $preLength = length($1);
-            $objektet = substr($objektet, $preLength);
+         else
+         {  if ($objektet =~ m'^(\d+ \d+ obj)'os)
+            {  my $preLength = length($1);
+               $objektet = substr($objektet, $preLength);
+            }
             $objektet =~ s/\b(\d+) \d+ R\b/xform() . ' 0 R'/oegs;
             $objekt[$ny] = $pos;
             $utrad = "$ny 0 obj\n$objektet";
@@ -4689,7 +4795,7 @@ sub analysera
 
 sub sidAnalys
 {  my ($oNr, $obj) = @_;
-   my ($ny, $strPos, $spar, $closeProc);
+   my ($ny, $strPos, $spar, $closeProc, $del1, $del2);
 
    if (! $parents[0])
    { $objNr++;
@@ -4705,10 +4811,8 @@ sub sidAnalys
    {  $old{$1} = $parent;
    }
    
-   undef $del2;
-
    if ($obj =~ m'^(\d+ \d+ obj\s*<<)(.+)(>>\s*stream)'os)
-   {  $del1 = $2;
+   {  $del1   = $2;
       $strPos = length($2) + length($3) + length($1);
       $del2   = substr($obj, $strPos);
    }
@@ -4723,7 +4827,7 @@ sub sidAnalys
    $del1 =~ s/\b(\d+) \d+ R\b/xform() . ' 0 R'/oegs;
 
    $utrad = "$ny 0 obj\n<<$del1\n" . '>>';
-   if (defined $del2)
+   if (defined $$del2)
    {   $utrad .= "stream\n$del2";
    }
    else
@@ -4753,7 +4857,7 @@ sub behandlaNames
 {  my ($namnObj, $iForm) = @_;
    
    my ($low, $high, $antNod0, $entry, $nyttNr, $ny, 
-       $fObjnr, $offSet, $bytes, $res, $key, $func, $corr);
+       $fObjnr, $offSet, $bytes, $res, $key, $func, $corr, @objData);
    my (@nod0, @nodUpp, @kid, @soek, %nytt);
    
    my $objektet  = '';
@@ -4762,12 +4866,8 @@ sub behandlaNames
    my $antNodUpp = 0;
    if ($namnObj)
    {  if ($iForm)                                # Läsning via interntabell
-      {   my %oHash = %{$intAct{$iForm}[0]};     # Objekt hash
-                    
-          my @oD = @{$oHash{$namnObj}};
+      {   $objektet = getObject($namnObj, 1);
 
-          $res = sysseek INFIL, $oD[oPOS], 0;
-          $res = sysread INFIL, $objektet, $oD[oSIZE];
           if ($objektet =~ m'<<(.+)>>'ogs)
           { $objektet = $1; }
           if ($objektet =~ s'/JavaScript\s+(\d+) \d+ R''os)
@@ -4777,9 +4877,7 @@ sub behandlaNames
              {  @soek = @kid;
                 @kid = ();
                 for my $sObj (@soek)
-                {  @oD = @{$oHash{$sObj}};
-                   $res = sysseek INFIL, $oD[oPOS], 0;
-                   $res = sysread INFIL, $obj, $oD[oSIZE];
+                {  $obj = getObject($sObj, 1);
                    if ($obj =~ m'/Kids\s*\[([^]]+)'ogs)
                    {  $vektor = $1;
                    }
@@ -4798,11 +4896,7 @@ sub behandlaNames
           }
       }
       else                                #  Läsning av ett "doc"
-      {  $offSet  = $oldObject{$namnObj};
-         $bytes   = $size[$namnObj];
-         $res     = sysseek INFIL, $offSet, 0;
-         sysread INFIL, $objektet, $bytes;
-   
+      {  $objektet = getObject($namnObj);             
          if ($objektet =~ m'<<(.+)>>'ogs)
          {  $objektet = $1; }
          if ($objektet =~ s'/JavaScript\s+(\d+) \d+ R''os)
@@ -4812,10 +4906,7 @@ sub behandlaNames
             {  @soek = @kid;
                @kid = ();
                for my $sObj (@soek)
-               {  $offSet  = $oldObject{$sObj};
-                  $bytes   = $size[$sObj];
-                  $res     = sysseek INFIL, $offSet, 0;
-                  sysread INFIL, $obj, $bytes;
+               {  $obj = getObject($sObj);  
                   if ($obj =~ m'/Kids\s*\[([^]]+)'ogs)
                   {  $vektor = $1;
                   }
@@ -5059,21 +5150,11 @@ sub defLadda
    $obj .= '{\r';
    my $key;
    for $key  (keys %fields)
-   {  $varde .= 'this.getField("'; 
-      $varde .= $key;
-      $varde .= '")'; 
-      $varde .= '.value = "'; 
-      $varde .= $fields{$key}; 
-      $varde .= '";\r';
-      $obj .= 'this.getField\("'; 
-      $obj .= $key;
-      $obj .= '"\)'; 
-      $obj .= '.value = "'; 
-      $obj .= $fields{$key}; 
-      $obj .= '";\r';
+   {  $varde .= "if (this.getField('$key')) this.getField('$key').value = '$fields{$key}';\r";
+      $obj   .= "if \\(this.getField\\('$key'\\)\\) this.getField\\('$key'\\).value = '$fields{$key}';\r";
    }
-   $varde .= '}\r ';
-   $obj .= '}\r )';
+   $varde .= ' 1;}\r ';
+   $obj .= ' 1;}\r )';
    $obj .= "\n>>\nendobj\n";
    $pos += syswrite UTFIL, $obj;
    $initScript{'Ladda'} = $varde;           

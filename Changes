@@ -1,5 +1,12 @@
 Revision history for Perl extension PDF::Reuse.
 
+0.15  Fri Oct 10 2003
+     First steps to adjust the module to PDF-1.5 (Acrobat 6.0). Lots of changes to
+     the code. 
+     If you try to update a field with prField and the field can't be found, the
+     field is just ignored. Before the change, you had a JavaScript error and a
+     subsequent interruption.
+
 0.14  Mon Sep 15 2003
      The added parameter for prInit from version 0.12 had to be withdrawn.
      Sometimes it caused Acrobat/Acrobat Reader to crash.
