@@ -10,13 +10,12 @@ use autouse 'Carp' => qw(carp
                          cluck
                          croak);
 
-use autouse 'Compress::Zlib' => qw(compress($)
-                                   inflateInit());
+use Compress::Zlib qw(compress inflateInit);
 
 use autouse 'Data::Dumper'   => qw(Dumper);
 use AutoLoader qw(AUTOLOAD);
 
-our $VERSION = '0.27';
+our $VERSION = '0.28';
 our @ISA     = qw(Exporter);
 our @EXPORT  = qw(prFile
                   prPage
@@ -138,8 +137,8 @@ use constant   foSOURCE     => 4;
 # Övrigt
 ##########
 
-use constant IS_MODPERL => $ENV{MOD_PERL};
-
+use constant IS_MODPERL => $ENV{MOD_PERL}; # For mod_perl 1.
+                                           # For mod_perl 2 pass $r to prFile()
 our $touchUp  = 1;
 
 our %stdFont = 
@@ -284,7 +283,10 @@ sub prFile
    else
    {   $utfil = $filnamn;
    }
-   if (IS_MODPERL && $utfil eq '-')
+   if (ref $utfil eq 'Apache::RequestRec') # mod_perl 2
+   { tie *UTFIL, $utfil;
+   }
+   elsif (IS_MODPERL && $utfil eq '-')     # mod_perl 1
    { tie *UTFIL, 'Apache';
    }
    else
@@ -1310,6 +1312,10 @@ Alternative 2 with parameters in an anonymous hash:
               HideWindowUI => 1,            # 1 | 0
               FitWindow    => 1,            # 1 | 0
               CenterWindow => 1   } );      # 1 | 0
+
+Alternative 3:
+
+   prFile ( $r );  # For mod_perl 2 pass the request object
 
 $fileName is optional, just like the rest of the parameters.
 File to create. If another file is current when this function is called, the first
@@ -2521,12 +2527,19 @@ sub mergeLinks
             $links{$link->{URI}} = $objNr;
             $pos += syswrite UTFIL, $rad;
         }
-        $objNr++;
-        $objekt[$objNr] = $pos;
-        $rad = "$objNr 0 obj<</Subtype/Link/Rect[$link->{x} $link->{y} "
-             . "$x2 $y2]/A $linkObjectNo 0 R/Border[0 0 0]>>endobj\n";
-        $pos += syswrite UTFIL, $rad;
-        push @annots, $objNr;
+        $rad = "/Subtype/Link/Rect[$link->{x} $link->{y} "
+             . "$x2 $y2]/A $linkObjectNo 0 R/Border[0 0 0]";
+        if (exists $links{$rad})
+        {   push @annots, $links{$rad};
+        }
+        else
+        {   $objNr++;
+            $objekt[$objNr] = $pos;
+            $links{$rad} = $objNr;
+            $rad = "$objNr 0 obj<<$rad>>endobj\n";
+            $pos += syswrite UTFIL, $rad;
+            push @annots, $objNr;
+        }
     }
     @{$links{'-1'}}   = ();
     @{$links{$tSida}} = ();
@@ -2567,8 +2580,8 @@ sub prStrWidth
   
   if (ref($PDF::Reuse::Util::font_widths{$Font}) eq 'ARRAY')
   {   my @font_table = @{ $PDF::Reuse::Util::font_widths{$Font} };
-      for my $c (split '', $string) 
-      {  $w += $font_table[ord $c];	
+      for (unpack ("C*", $string)) 
+      {  $w += $font_table[$_];	
       }
   }
   else
@@ -3758,9 +3771,9 @@ sub crossrefObj
        $m++;
        my $max     = $currObj + $intervall[$m];   
        
-       for (split('',$output))
-       {  if (($_ ne "\x0") && ($i > 0) && ($i < $upTo))
-          {   my $tal = ord($_) + $last[$i] ;
+       for (unpack ("C*", $output))
+       {  if (($_ != 0) && ($i > 0) && ($i < $upTo))
+          {   my $tal = $_ + $last[$i] ;
               if ($tal > 255)
               {$tal -= 256;
               }
@@ -3958,10 +3971,10 @@ sub getObject
     }
     else
     {   if (wantarray)
-        {   return ("$unZipped{$nr} endobj\n", $offs, $siz, $embedded)
+        {   return ("$unZipped{$nr}endobj\n", $offs, $siz, $embedded)
         }
         else
-        {   return "$unZipped{$nr} endobj\n";
+        {   return "$unZipped{$nr}endobj\n";
         }
     } 
 }

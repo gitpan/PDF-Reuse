@@ -299,7 +299,7 @@ sub hyperLink
     if (! defined $fontSize) 
     {  ($actualSize, $fontSizeBeforetheChange) = PDF::Reuse::prFontSize();
        $fontSize = $fontSizeBeforetheChange;
-       PDF::Reuse::prFontSize($fontSize);
+       PDF::Reuse::prFontSize($fontSize) if ($actualSize != $fontSizeBeforetheChange);
     }
     else
     {  ($actualSize, $fontSizeBeforetheChange) = PDF::Reuse::prFontSize($fontSize);
@@ -318,7 +318,9 @@ sub hyperLink
                           URI    => $URI } );
     
     PDF::Reuse::prAdd("0 0 0 RG 0 0 0 rg\nQ\n");
-    PDF::Reuse::prFont("$oldExternalname");
-    PDF::Reuse::prFontSize("$fontSizeBeforetheChange");
+    PDF::Reuse::prFont($oldExternalname) 
+                 if ($oldExternalname ne $externalName);
+    PDF::Reuse::prFontSize($fontSizeBeforetheChange)
+                 if ($fontSizeBeforetheChange != $fontSize);
     return $x2;
 }

@@ -1,5 +1,12 @@
 Revision history for Perl extension PDF::Reuse.
 
+0.28 Fri Apr 23 2004
+     New annotations, which are repeated on many pages, are defined only once.
+     You can tie the request object to the output file, thanks to Matisse Enzer.
+     Compress::Zlib is included in the code with 'use'. There was some problem with
+     'autouse', and I couldn't solve it. Minor changes to the the code to improve
+     performance a little. 
+
 0.27 Fri Apr 16 2004
      A potential bug with links removed. Repeated links are stored only once.
      Unnecessary linefeeds removed.
