@@ -15,7 +15,7 @@ use autouse 'Data::Dumper'   => qw(Dumper);
 use AutoLoader qw(AUTOLOAD);
 
 
-our $VERSION = '0.10';
+our $VERSION = '0.11';
 our @ISA     = qw(Exporter);
 our @EXPORT  = qw(prFile
                   prPage
@@ -1134,9 +1134,9 @@ Parameters within [] are optional
 
 The module doesn't make any attempt to import anything from encrypted files.
 
-=head2 Mandatory Functions
+=head1 Mandatory Functions
 
-=head3 prFile ( [$fileName] )           
+=head2 prFile ( [$fileName] )           
 
 File to create. If another file is current when this function is called, the first
 one is written and closed. Only one file is processed at a single moment. If
@@ -1145,7 +1145,7 @@ $fileName is undefined, output is written to STDOUT.
 Look at any program in this documentation for an example. prInitVars() shows how
 this function could be used together with a web server.
 
-=head3 prEnd ()
+=head2 prEnd ()
 
 When the processing is going to end, the buffers of the B<last> file has to be written to the disc.
 If this function is not called, the page structure, xref part and so on will be 
@@ -1154,10 +1154,10 @@ lost.
 Look at any program in this documentation for an example.
 
 
-=head2 Optional Functions
+=head1 Optional Functions
 
 
-=head3 prAdd ( $string )
+=head2 prAdd ( $string )
 
 With this command you can add whatever you want to the current content stream.
 No syntactical checks are made, but if you use an internal name, the module tries
@@ -1188,7 +1188,7 @@ This function is intended to give you detail control at a low level.
    prAdd($string);                       
    prEnd(); 
 
-=head3 prBar ([$x, $y, $string])
+=head2 prBar ([$x, $y, $string])
 
 Prints a bar font pattern at the current page.
 Returns $internalName for the font.
@@ -1216,7 +1216,7 @@ not write anything to the current page.
 B<An easier and often better way to produce barcodes is to use PDF::Reuse::Barcode. 
 Look at that module!>
 
-=head3 prBookmark($reference)
+=head2 prBookmark($reference)
 
 Defines a "bookmark". $reference refers to a hash or array of hashes which look
 something like this:
@@ -1239,6 +1239,8 @@ Each hash can have these components:
                 (Three simple numbers are translated to page, x and y in the
                 sentences: this.pageNum = page; this.scroll(x, y); )
         kids    will have a reference to another hash or array of hashes
+        close   if this component is present, the bookmark will be closed
+                when the document is opened
         color   3 numbers, RGB-colors e.g. '0.5 0.5 1' for light blue
         style   0, 1, 2, or 3. 0 = Normal, 1 = Italic, 2 = Bold, 3 = Bold Italic
 
@@ -1262,8 +1264,9 @@ Creating bookmarks for a document:
         push @pageMarks, $bookMark;
         prPage();
     }
-    prBookmark( { text => 'Document',
-                  kids => \@pageMarks } );
+    prBookmark( { text  => 'Document',
+                  close => 1,
+                  kids  => \@pageMarks } );
     prEnd();
 
 
@@ -1273,7 +1276,7 @@ your data. You can let your users go to external links also, so they can "drill 
 to other documents.> 
 
 
-=head3 prCid ( $timeStamp )
+=head2 prCid ( $timeStamp )
 
 An internal function. Don't bother about it. It is used in automatic
 routines when you want to restore a document. It gives modification time of
@@ -1281,7 +1284,7 @@ the next PDF-file or JavaScript.
 See "Restoring a document from the log" in the tutorial for more about the
 time stamp
 
-=head3 prCompress ( [1] )
+=head2 prCompress ( [1] )
 
 '1' here is a directive to compress the streams of the current file.
 Streams shorter than 101 bytes are not compressed. The streams are compressed in
@@ -1290,7 +1293,7 @@ prCompress(); is a directive not to compress. This is default.
 
 See e.g. "Starting to reuse" in the tutorial for an example.
 
-=head3 prDoc ( $documentName )
+=head2 prDoc ( $documentName )
 
 Adds a document to the document you are creating. If it is the first interactive
 component ( prDoc() or prDocForm() ) the interactive functions are kept and also merged
@@ -1311,7 +1314,7 @@ with JavaScripts you have added (if any).
    prEnd(); 
 
 
-=head3 prDocDir ( $directoryName )
+=head2 prDocDir ( $directoryName )
 
 Sets directory for produced documents
 
@@ -1324,7 +1327,7 @@ Sets directory for produced documents
    prText(200, 600, 'New text');
    prEnd();
 
-=head3 prDocForm ( $pdfFile, [$page, $adjust, $effect] )
+=head2 prDocForm ( $pdfFile, [$page, $adjust, $effect] )
 
 Reuses an interactive page
 
@@ -1377,7 +1380,7 @@ save the file.
 Remember to save that file before closing it.)
 
 
-=head3 prExtract ( $pdfFile, $pageNo, $oldInternalName )
+=head2 prExtract ( $pdfFile, $pageNo, $oldInternalName )
 
 B<oldInternalName>, a "name"-object.  This is the internal name you find in the original file.
 Returns a B<$newInternalName> which can be used for "low level" programming. You
@@ -1387,7 +1390,7 @@ e.g. thermometer.pm, to see how this function can be used.
 When you call this function, the necessary objects will be copied to your new
 PDF-file, and you can refer to them with the new name you receive.
 
-=head3 prField ( $fieldName, $value )
+=head2 prField ( $fieldName, $value )
 
 B<$fieldName> is an interactive field in the document you are creating.
 It has to be spelled exactly the same way here as it spelled in the document.
@@ -1403,7 +1406,7 @@ can write like this:
 
 You need 3 backslashes to preserve the special characters, if you have single-quotes.
 
-=head3 prFont ( [$fontName] )
+=head2 prFont ( [$fontName] )
 
 Sets current font.
 
@@ -1453,12 +1456,12 @@ The example above shows you two ways of setting and using a font. One simple, an
 one complicated with a possibility to detail control. 
 
 
-=head3 prFontSize ( [$size] )
+=head2 prFontSize ( [$size] )
 
 Sets current font size, returns B<$actualSize, $fontSizeBeforetheChange>.
 prFontSize() sets the size to 12 pixels, which is default. 
 
-=head3 prForm ( $pdfFile, [$page, $adjust, $effect, $tolerant] )
+=head2 prForm ( $pdfFile, [$page, $adjust, $effect, $tolerant] )
 
 Reuses a page from a PDF-file.
 
@@ -1550,7 +1553,7 @@ Also data about the form is taken, so you can control more in detail how it
 will be displayed. Study the tutorial and the "PDF Reference Manual" for
 more information about the "low level" manipulations at the end of the code.
 
-=head3 prGetLogBuffer ()
+=head2 prGetLogBuffer ()
 
 returns a B<$buffer> of the log of the current page. (It could be used
 e.g. to calculate a MD5-digest of what has been registered that far, instead of 
@@ -1559,7 +1562,7 @@ accumulating the single values) A log has to be active, see prLogDir() below
 Look at "Using the template" and "Restoring a document from the log" in the
 tutorial for examples of usage.
 
-=head3 prGraphState ( $string )
+=head2 prGraphState ( $string )
 
 Defines a graphic state parameter dictionary in the current file. It is a "low level"
 function. Returns B<$internalName>. The B<$string> has to be a complete dictionary
@@ -1606,12 +1609,12 @@ Perhaps you will never have to use this function.
    prEnd();
 
 
-=head3 prId ( $string )
+=head2 prId ( $string )
 
 An internal function. Don't bother about it. It is used e.g. when a document is
 restored and an id has to be set, not calculated.
 
-=head3 prIdType ( $string )
+=head2 prIdType ( $string )
 
 An internal function. Avoid using it. B<$string> could be "Rep" for replace or
 "None" to avoid calculating an id.
@@ -1619,7 +1622,7 @@ An internal function. Avoid using it. B<$string> could be "Rep" for replace or
 Normally you don't use this function. Then an id is calculated with the help of
 Digest::MD5::md5_hex and some data from the run.
 
-=head3 prImage ( $pdfFile [, $pageNo, $imageNo, $effect] )
+=head2 prImage ( $pdfFile [, $pageNo, $imageNo, $effect] )
 
 Reuses an image.
 
@@ -1701,7 +1704,7 @@ page, the two images are scaled and shown with "low level" directives.
 In the distribution there is an utility program, 'reuseComponent_pl', which displays
 included images in a PDF-file and their "names".
 
-=head3 prInit ( $string )
+=head2 prInit ( $string )
 
 B<$string> can be any JavaScript code, but you can only refer to functions included
 with prJs. The JavaScript interpreter will not know other functions in the document.
@@ -1710,7 +1713,7 @@ because the interpreter hasn't come that far, when initiation is done.
 
 See prJs() for an example
 
-=head3  prInitVars([1])
+=head2  prInitVars([1])
 
 To initiate global variables. If you run programs with PDF::Reuse as persistent
 procedures, you probably need to initiate global variables. 
@@ -1737,7 +1740,7 @@ If you call this function without parameters all global variables, including the
 internal tables, are initiated.
 
 
-=head3 prJpeg ( $imageFile, $width, $height )
+=head2 prJpeg ( $imageFile, $width, $height )
 
 B<$imageFile> contains 1 single jpeg-image. B<$width> and B<$height>
 also have to be specified. Returns the B<$internalName>
@@ -1765,7 +1768,7 @@ also have to be specified. Returns the B<$internalName>
 This is a little like an extra or reserve routine to add images to the document.
 The most simple way is to use prImage()  
 
-=head3 prJs ( $string|$fileName )
+=head2 prJs ( $string|$fileName )
 
 To add JavaScript to your new document. B<$string> has to consist only of
 JavaScript functions: function a (..){ ... } function b (..) { ...} and so on
@@ -1781,7 +1784,7 @@ In that case the file has to consist only of JavaScript functions.
    prEnd();
 
 
-=head3 prLog ( $string )
+=head2 prLog ( $string )
 
 Adds whatever you want to the current log (a reference No, a commentary, a tag ?)
 A log has to be active see prLogDir()
@@ -1789,7 +1792,7 @@ A log has to be active see prLogDir()
 Look at "Using the template" and "Restoring the document from the log" in
 the tutorial for an example.
 
-=head3 prLogDir ( $directory )
+=head2 prLogDir ( $directory )
 
 Sets a directory for the logs and activates the logging. 
 A little log file is created for each PDF-file. Normally it should be much, much
@@ -1813,7 +1816,7 @@ In this example a log file with the name 'myFile.pdf.dat' is created in the
 directory 'C:\run'. If that directory doesn't exist, the system tries to create it.
 (But, just as mkdir does, it only creates the last level in a directory tree.)
 
-=head3 prMbox ( [$lowerLeftX, $lowerLeftY, $upperRightX, $upperRightY] )
+=head2 prMbox ( [$lowerLeftX, $lowerLeftY, $upperRightX, $upperRightY] )
 
 Defines the format (MediaBox) of the current page. 
 
@@ -1821,13 +1824,13 @@ If the function or the parameters are missing, they are set to 0, 0, 595, 842 pi
 
 See prForm() for an example.
 
-=head3 prMoveTo ( $x, $y )
+=head2 prMoveTo ( $x, $y )
 
 Defines positions where to put e.g. next image
 
 See prImage() for an example.
 
-=head3 prPage ( [$noLog] )
+=head2 prPage ( [$noLog] )
 
 Inserts a page break
 
@@ -1836,14 +1839,14 @@ when automatic page breaks are made.
 
 See prForm() for an example. 
 
-=head3 prScale ( [$xSize, $ySize] )
+=head2 prScale ( [$xSize, $ySize] )
 
 Each of $xSize and $ySize are set to 1 if missing. You can use this function to
 scale an image before showing it.
 
 See prImage() for an example.
 
-=head3 prText ( $x, $y, $string )
+=head2 prText ( $x, $y, $string )
 
 Puts B<$string> at position B<$x, $y>
 Current font and font size is used. (If you use prAdd() before this function,
@@ -1851,7 +1854,7 @@ many other things could also influence the text.)
 
 See prImage() for an example.  
 
-=head3 prTouchUp ( [1] );
+=head2 prTouchUp ( [1] );
 
 By default and after you have issued prTouchUp(1), you can change the document
 with the TouchUp tool from within Acrobat.
@@ -1871,7 +1874,7 @@ See "Using the template" in the tutorial for an example.
 
 (To encrypt your documents: use the batch utility within Acrobat)
 
-=head3 prVers ( $versionNo )
+=head2 prVers ( $versionNo )
 
 An internal routine to check version of this module in case a document has to be
 restored. 
@@ -2048,7 +2051,8 @@ sub ordnaBookmarks
 sub descend
 {   my ($parent, %entry) = @_;
     my ($first, $last, $count, $me, $rad, $jsObj);
-    $totalCount++;
+    if (! exists $entry{'close'})
+    {  $totalCount++; }
     $count = $totalCount;
     $me = $entry{'this'};
     if (exists $entry{'kids'})
@@ -2070,6 +2074,9 @@ sub descend
                 }
                 if ($i > 0)
                 {  $array[$i]->{'previous'} = $objNr - 1;
+                }
+                if (exists $entry{'close'})
+                {  $array[$i]->{'close'} = 1;
                 }
             } 
 

@@ -1,5 +1,9 @@
 Revision history for Perl extension PDF::Reuse.
 
+0.11  Wed Sep 3 2003
+     You can have your bookmarks closed with a new parameter.
+     Changes to the documentation.
+
 0.10  Tue Aug 26 2003
      Added a function to define bookmarks. 
      Corrected a bug with object numbers.
