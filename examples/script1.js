@@ -2,10 +2,6 @@
 
    function nameAddress(page, xpos, ypos)
    {  var thePage = 0;
-      if (this.info.ModDate)
-      {  return true;         
-      }
-   
       if (page)
       {   thePage = page;
       }

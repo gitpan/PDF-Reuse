@@ -1,9 +1,6 @@
 function nameAddress(page, xpos, ypos)
 {  var thePage = 0;
-   if (this.info.ModDate)
-   { return true;         
-   }
-   
+      
    if (page)
 	{	thePage = page;
 	}
@@ -57,10 +54,7 @@ function nameAddress(page, xpos, ypos)
 }
 
 function butt(page, xpos, ypos)
-{  if (this.info.ModDate)
-   { return true;         
-   }
-   
+{     
 	var myRec = [ 400, 50, 0, 0];              // default position
 	if (xpos)
 	{	myRec[0] = xpos;
@@ -117,9 +111,7 @@ function butt(page, xpos, ypos)
 
        
    }
-
-
-      return true;
+   1;
 }
 
 function send(page)
@@ -138,7 +130,7 @@ function send(page)
    k.strokeColor = color.blue;
    k.highlight = highlight.p;
    inf.value = 'When properly signed, press <MailExp> to send the document by mail to us';
-	return true;
+	1;
   
 }
 

@@ -15,7 +15,7 @@ use autouse 'Data::Dumper'   => qw(Dumper);
 use AutoLoader qw(AUTOLOAD);
 
 
-our $VERSION = '0.12';
+our $VERSION = '0.14';
 our @ISA     = qw(Exporter);
 our @EXPORT  = qw(prFile
                   prPage
@@ -58,7 +58,7 @@ our ($utfil, $utrad, $slutNod, $formRes, $formCont,
     $AcroForm, $interActive, $NamesSaved, $AARootSaved, $AAPageSaved, $root,
     $AcroFormSaved, $AnnotsSaved, $id, $ldir, $checkId, $formNr, $imageNr, 
     $filnamn, $interAktivSida, $taInterAkt, $type, $runfil, $checkCs,
-    $confuseObj, $compress,$pos, $fontNr, $objNr, $xPos, $yPos, $saveInit,
+    $confuseObj, $compress,$pos, $fontNr, $objNr, $xPos, $yPos,
     $defGState, $gSNr, $pattern, $shading, $colorSpace, $totalCount);
  
 our (@kids, @counts, @size, @formBox, @objekt, @parents, @aktuellFont, @skapa,
@@ -317,7 +317,7 @@ sub prFile
    undef $AARootSaved;
    undef $AcroFormSaved;
    $checkId    = '';
-   undef $saveInit;
+   # undef $aktNod;
    undef $confuseObj;
    $fontSize  = 12;
    $genLowerX = 0;
@@ -1704,16 +1704,12 @@ page, the two images are scaled and shown with "low level" directives.
 In the distribution there is an utility program, 'reuseComponent_pl', which displays
 included images in a PDF-file and their "names".
 
-=head2 prInit ( $string [,$show] )
+=head2 prInit ( $string )
 
 B<$string> can be any JavaScript code, but you can only refer to functions included
 with prJs. The JavaScript interpreter will not know other functions in the document.
 Often you can add new things, but you can't remove or change interactive fields,
 because the interpreter hasn't come that far, when initiation is done.
-
-If B<$show> has any value, the Javascript code will be shown at document level. That
-might be an advantage when you want to find errors in the code, but the document
-will be bigger.
 
 See prJs() for an example
 
@@ -2892,10 +2888,6 @@ sub prJs
 
 sub prInit
 {   my $initText = shift;
-    my $save     = shift;
-    if ($save)
-    {   $saveInit = 1;
-    }
     my @fall = ($initText =~ m'([\w\d\_\$]+)\s*\(.*?\)'gs);
     for (@fall)
     {  if (! exists $initScript{$_})
@@ -2905,7 +2897,7 @@ sub prInit
     push @inits, $initText;
     if ($runfil)
     {   $initText = prep($initText);
-        $log .= "Init~$initText~$save\n";
+        $log .= "Init~$initText\n";
     }
     if ($interAktivSida)
     {  errLog("Too late, has already tried to create INITIAL JAVA SCRIPTS within an interactive page");
@@ -4854,8 +4846,7 @@ sub behandlaNames
            {  if (exists $nyaFunk{$key})
               {   $initScript{$key} = $nyaFunk{$key};
               }
-              if ((exists $script{$key})    # företräde för nya funktioner !
-              &&  ($saveInit))
+              if (exists $script{$key})   # företräde för nya funktioner !
               {   delete $script{$key};    # gammalt script m samma namn plockas bort
               } 
               my @fall = ($initScript{$key} =~ m'([\w\d\_\$]+)\s*\([\w\s\,\d\.]*\)'ogs);
@@ -4877,13 +4868,11 @@ sub behandlaNames
    if (scalar %fields)
    {  $fObjnr = defLadda();
       push @inits, 'Ladda();';
-      if ($saveInit)
-      {  $script{'Ladda'} = $fObjnr;
-         $nytt{'Ladda'} = $fObjnr;
-      }
+      $script{'Ladda'} = $fObjnr;
+      $nytt{'Ladda'} = $fObjnr;
    }
 
-   if ((scalar @inits) && ($saveInit))
+   if (scalar @inits)
    {  $fObjnr = defInit();
       $script{'Init'} = $fObjnr;
       $nytt{'Init'} = $fObjnr;
@@ -5008,7 +4997,7 @@ sub skrivKedja
        $obj .= $func . "\n";
    }
    $obj .='function Init\(\)\r{\r';
-   $obj .= 'if \(typeof this.info.ModDate == "object"\)\r{ return true;} \r'; 
+   $obj .= 'if \(typeof this.info.ModDate == "object"\)\r{ return true; }\r'; 
    my $act;
    for $act  (@inits)
    {  $obj .= "\n" . $act;
@@ -5096,7 +5085,7 @@ sub defInit
    my $ny = $objNr;
    $objekt[$ny] = $pos;
    $obj = "$ny 0 obj\n<<\n/S /JavaScript\n/JS " . '(function Init\(\)\r{\r';
-   $obj .= 'if \(typeof this.info.ModDate == "undefined"\)\r{ return true; }\r'; 
+   $obj .= 'if \(typeof this.info.ModDate == "object"\)\r{ return true; }\r'; 
    my $act;
    for $act  (@inits)
    {  $act =~ s'\('\\('gso;
