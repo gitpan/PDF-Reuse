@@ -325,9 +325,9 @@ $declare .= '   $ySize = $self->{\'ySize\'} * $self->{\'size\'};' . "\n";
 $declare .= '   $str .= "q\n";' . "\n" .
             '   $str .= ' . '"$xSize 0 0 $ySize $x $y cm\n";' . "\n";
 $declare .= '   if ($self->{\'rotate\'} != 0)' . "\n" .
-            '   {   my $radian = $self->{\'rotate\'} / 57.3;    # approx. ' . "\n" .
-            '       my $Cos    = cos($radian);' . "\n" .
-            '       my $Sin    = sin($radian);' . "\n" .
+            '   {   my $radian = sprintf("%.6f", $self->{\'rotate\'} / 57.296);' . "\n" .
+            '       my $Cos    = sprintf("%.6f", cos($radian));' . "\n" .
+            '       my $Sin    = sprintf("%.6f", sin($radian));' . "\n" .
             '       my $negSin = $Sin * -1;'    . "\n" .
             '       $str .= "$Cos $Sin $negSin $Cos 0 0 cm\n";' . "\n" .
             '   }' . "\n";

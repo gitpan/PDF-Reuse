@@ -1,5 +1,9 @@
 Revision history for Perl extension PDF::Reuse.
 
+0.19 Fri Nov 21 2003
+     Code produced for prField is now prepared with "extra" backslashes for 
+     \n \r and \'. Improved precision in the "formula" for rotation.
+
 0.18  Tue Nov 11 2003
       Several new parameters for forms and images, so they can be resized, moved
      and rotated. 

@@ -16,7 +16,7 @@ use autouse 'Compress::Zlib' => qw(compress($)
 use autouse 'Data::Dumper'   => qw(Dumper);
 use AutoLoader qw(AUTOLOAD);
 
-our $VERSION = '0.18';
+our $VERSION = '0.19';
 our @ISA     = qw(Exporter);
 our @EXPORT  = qw(prFile
                   prPage
@@ -1327,7 +1327,8 @@ Sets directory for produced documents
 
 =head2 prDocForm		- use an interactive page as a form 
 
-Alternative 1) You put your parameters in an anonymous hash
+Alternative 1) You put your parameters in an anonymous hash (only B<file> is really 
+necessary, the others get default values if not given).
 
    prDocForm ( { file     => $pdfFile,       # template file
                  page     => $page,          # page number (of imported template)
@@ -1354,9 +1355,6 @@ Anyway the function returns in list context:  B<$intName, @BoundingBox,
 $numberOfImages>, in scalar context:  B<$internalName> of the form.
 
 Look at prForm() for an explaination of the parameters.
-
-B<file> is the only parameter you always have to specify. The others get default
-values, if not given.
 
 N.B. Usually you shouldn't adjust or change size and proportions of an interactive
 page. The graphic and interactive components are independent of each other and there 
@@ -1412,10 +1410,16 @@ See prDocForm() for an example
 If you are going to assign a value to a field consisting of several lines, you
 can write like this:
 
+   my $string = "This is the first line \r second line \n 3:rd line";
+   prField('fieldName', $string);
+
+
+If you have single-quotes it is more complicated. You need 3 backslashes 
+to preserve the special characters.
+
    my $string = 'This is the first line \\\r second line \\\n 3:rd line';
    prField('fieldName', $string);
 
-You need 3 backslashes to preserve the special characters, if you have single-quotes.
 
 =head2 prFont		- set current font 
 
@@ -1477,7 +1481,8 @@ prFontSize() sets the size to 12 pixels, which is default.
 
 =head2 prForm		- use a page from an old document as a form/background 
 
-Altrnative 1) You put your parameters in an anonymous hash
+Alternative 1) You put your parameters in an anonymous hash (only B<file> is really 
+necessary, the others get default values if not given).
 
    prForm ( { file     => $pdfFile,       # template file
               page     => $page,          # page number (of imported template)
@@ -1502,9 +1507,6 @@ Alternative 2) You put your parameters in this order
 
 Anyway the function returns in list context:  B<$intName, @BoundingBox, 
 $numberOfImages>, in scalar context:  B<$internalName> of the form. 
-
-B<file> is the only parameter you always have to specify. The others get default
-values, if not given. 
 
 if B<page> is excluded 1 is assumed. 
 
@@ -1689,7 +1691,8 @@ checks are made. Perhaps you will never have to use this function.
 
 =head2 prImage		- reuse an image from an old PDF document 
 
-Alternative 1) You put your parameters in an anonymous hash
+Alternative 1) You put your parameters in an anonymous hash (only B<file> is really 
+necessary, the others get default values if not given).
 
    prImage( { file     => $pdfFile,       # template file
               page     => $page,          # page number
@@ -1719,9 +1722,6 @@ $height>
 Assumes that $pageNo and $imageNo are 1, if not specified. If $effect is given and
 anything else then 'print', the image will be defined in the document,
 but not shown at this moment.
-
-B<file> is the only parameter you always have to specify. The others get default
-values, if not given.
 
 For all other parameters, look at prForm().
 
@@ -2825,9 +2825,9 @@ sub calcMatrix
        {   $upperX = 0;
            $upperY = 0;
        }  
-       my $radian = $rotate / 57.3;    # approx. 
-       my $Cos    = cos($radian);
-       my $Sin    = sin($radian);
+       my $radian = sprintf("%.6f", $rotate / 57.296);    # approx. 
+       my $Cos    = sprintf("%.6f", cos($radian));
+       my $Sin    = sprintf("%.6f", sin($radian));
        my $negSin = $Sin * -1;
        $str .= "$Cos $Sin $negSin $Cos $upperX $upperY cm\n";
    }
@@ -5396,9 +5396,15 @@ sub inkludera
 sub defLadda
 {  my $code = "function Ladda()\r{\r";
    for (keys %fields)
-   {  $code .= "if (this.getField('$_')) this.getField('$_').value = '$fields{$_}';\r";
+   {  my $val = $fields{$_};
+      $val =~ s/\'/\\\\\'/gos;
+      $val =~ s/\r/\\\\r/gos;
+      $val =~ s/\n/\\\\n/gos; 
+      $code .= "if (this.getField('$_')) this.getField('$_').value = '$val';\r";
    }  
-   $code .= " 1;}\r";   
+   $code .= " 1;}\r";
+   
+   
    $initScript{'Ladda'} = $code;
    if ($duplicateInits) 
    {  my $ny = skrivJS($code);        
