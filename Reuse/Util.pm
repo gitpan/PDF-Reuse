@@ -2,7 +2,7 @@ package PDF::Reuse::Util;
 use PDF::Reuse;
 require    Exporter;
 our @ISA     = qw(Exporter);
-our @EXPORT  = qw(hyperLink);
+our @EXPORT  = qw(hyperLink blackText);
 
 
 use strict;
@@ -290,6 +290,8 @@ sub hyperLink
     my $text = shift || ' ';
     my $URI  = shift;
     my $fontSize = shift;
+    my $s    = shift || 'URI';
+
     my ($actualSize, $fontSizeBeforetheChange, $height, $x2, $y2);
     if ((! defined $x) || (! defined $y) || (! defined $URI))
     {  return undef;
@@ -315,12 +317,18 @@ sub hyperLink
                           y => $y2,
                           width => $width,
                           height => $height,
-                          URI    => $URI } );
-    
+                          URI => $URI,
+                          s => $s} );
+
     PDF::Reuse::prAdd("0 0 0 RG 0 0 0 rg\nQ\n");
     PDF::Reuse::prFont($oldExternalname) 
                  if ($oldExternalname ne $externalName);
     PDF::Reuse::prFontSize($fontSizeBeforetheChange)
                  if ($fontSizeBeforetheChange != $fontSize);
     return $x2;
+}
+
+sub blackText
+{   PDF::Reuse::prAdd("0 0 0 rg\n0 g\nf\n");
+    1;
 }

@@ -13,5 +13,5 @@ WriteMakefile(
                           Data::Dumper   => 0},
     ($] >= 5.005 ?    ## Add these new keywords supported since 5.005
       (ABSTRACT_FROM => 'Reuse.pm', 
-       AUTHOR     => 'Lars Lundberg elkelund@worldonline.se') : ()),
+       AUTHOR     => 'Lars Lundberg LARSLUND@CPAN.ORG') : ()),
 );

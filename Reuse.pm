@@ -15,7 +15,7 @@ use Compress::Zlib qw(compress inflateInit);
 use autouse 'Data::Dumper'   => qw(Dumper);
 use AutoLoader qw(AUTOLOAD);
 
-our $VERSION = '0.29';
+our $VERSION = '0.32';
 our @ISA     = qw(Exporter);
 our @EXPORT  = qw(prFile
                   prPage
@@ -49,7 +49,8 @@ our @EXPORT  = qw(prFile
                   prMbox
                   prBookmark
                   prStrWidth
-                  prLink);
+                  prLink
+                  prSinglePage);
 
 our ($utfil, $slutNod, $formCont, $imSeq, $duplicateInits, $page, $sidObjNr, $sida,
     $interActive, $NamesSaved, $AARootSaved, $AAPageSaved, $root,
@@ -132,6 +133,7 @@ use constant   foINTNAMN    => 1;
 use constant   foEXTNAMN    => 2;
 use constant   foORIGINALNR => 3;
 use constant   foSOURCE     => 4;
+use constant   foTYP        => 5;
 
 ##########
 # Övrigt
@@ -200,7 +202,7 @@ sub prFont
     {  $log .= "Font~$nyFont\n";
     }
     if (wantarray)
-    {  return ($intnamn, $extnamn, $oldIntNamn, $oldExtNamn);
+    {  return ($intnamn, $extnamn, $oldIntNamn, $oldExtNamn, \%font);
     }
     else
     {  return $intnamn;
@@ -283,7 +285,10 @@ sub prFile
    else
    {   $utfil = $filnamn;
    }
-   if (ref $utfil eq 'Apache::RequestRec') # mod_perl 2
+
+   my $utfil_ref = ref $utfil;
+   if ($utfil_ref and ($utfil_ref eq 'Apache2::RequestRec') or
+                      ($utfil_ref eq 'Apache::RequestRec') ) # mod_perl 2
    { tie *UTFIL, $utfil;
    }
    elsif (IS_MODPERL && $utfil eq '-')     # mod_perl 1
@@ -406,27 +411,35 @@ sub prPage
 }
 
 sub prText
-{ my $xFrom = shift;
-  my $y     = shift;
+{ my $xPos  = shift;
+  my $yPos  = shift;
   my $TxT   = shift;
-  my $how   = shift || '';
-
-  my ($xTo, $rotate); 
+  my $align = shift || 'left';
+  my $rot   = shift || '0';
+  
+  my $width = 0;
+  my $x_align_offset = 0;
+  
   if (! defined $TxT)
   {  $TxT = '';
   } 
 
-  if (($xFrom !~ m'[\d\.]+'o) || (! defined $xFrom))
-  { errLog("Illegal x-position for text: $xFrom");
+  if (($xPos !~ m'\-?[\d\.]+'o) || (! defined $xPos))
+  { errLog("Illegal x-position for text: $xPos");
   } 
-  if (($y !~ m'[\d\.]+'o) || (! defined $y))
-  { errLog("Illegal y-position for text: $y");
+  if (($yPos !~ m'\-?[\d\.]+'o) || (! defined $yPos))
+  { errLog("Illegal y-position for text: $yPos");
   }
 
   if ($runfil)
   {   my $Texten   = prep($TxT);
-      $log .= "Text~$xFrom~$y~$Texten~$how\n";
+      $log .= "Text~$xPos~$yPos~$Texten~$align~$rot\n";
   } 
+
+  if (length($stream) < 3)
+  {  $stream = "0 0 0 rg\n 0 g\nf\n";
+  }
+ 
 
   if (! $aktuellFont[foINTNAMN])
   {  findFont();
@@ -434,66 +447,93 @@ sub prText
   my $Font        = $aktuellFont[foINTNAMN];        # Namn i strömmen
   $sidFont{$Font} = $aktuellFont[foREFOBJ];
   
-  if ($how)
-  {  $how = lc($how);
-     if ($how eq 'right')
-     {  $xTo    = $xFrom;
-        $xFrom -= prStrWidth($TxT, $aktuellFont[foEXTNAMN], $fontSize);
+  
+  # define what the offset for alignment is 
+  
+  if ((wantarray) 
+  || ($align ne 'left'))
+  {  $width = prStrWidth($TxT, $aktuellFont[foEXTNAMN], $fontSize);
+     if($align eq 'right')
+     {  $x_align_offset = - $width;
      }
-     elsif ($how eq 'center')
-     {  my $width  = prStrWidth($TxT, $aktuellFont[foEXTNAMN], $fontSize);
-        $xTo = $xFrom + ($width / 2);
-        $xFrom =  $xTo - $width;    
-     }
-     elsif (($how ne 'left') && ($how =~ m'\d'o))
-     {  $rotate = $how;
-     }
-     elsif (wantarray)
-     {  $xTo = $xFrom + prStrWidth($TxT, $Font, $fontSize);
+     elsif ($align eq 'center')
+     {  $x_align_offset = -$width / 2;               
      }
   }
-  elsif (wantarray)
-  {  $xTo = $xFrom + prStrWidth($TxT, $Font, $fontSize);
-  }
-
+  
   $TxT =~ s|\(|\\(|gos;
   $TxT =~ s|\)|\\)|gos;
-
-  unless ($rotate) 
-  {   $stream .= "\nBT /$Font $fontSize Tf ";
-      $stream .= "$xFrom $y Td \($TxT\) Tj ET\n";
-  }
-  else
-  {   if ($rotate =~ m'q(\d)'oi)
+  
+  
+  unless($rot)
+  {  $stream .= "\nBT /$Font $fontSize Tf ";
+     unless ($aktuellFont[foTYP])
+     {   $stream .= $xPos+$x_align_offset . " $yPos Td \($TxT\) Tj ET\n";
+     }
+     else
+     {   my $text;
+         $TxT =~ s/\\(\d\d\d)/chr(oct($1))/eg;
+         for (unpack ('C*', $TxT)) 
+         {  $text .= sprintf("%04x", ($_ - 29));	
+         }
+         $stream .= $xPos+$x_align_offset . " $yPos Td \<$text\> Tj ET\n";
+     }
+  } 
+  else 
+  {  if ($rot =~ m'q(\d)'oi)
       {  if ($1 eq '1')
-         {  $rotate = 270;
+         {  $rot = 270;
          }
          elsif ($1 eq '2')
-         {  $rotate = 180;
+         {  $rot = 180;
          }
          else
-         {  $rotate = 90;
+         {  $rot = 90;
          }
       }
-      my $radian = sprintf("%.6f", $rotate / 57.2957795);    # approx. 
-      my $Cos    = sprintf("%.6f", cos($radian));
-      my $Sin    = sprintf("%.6f", sin($radian));
-      my $negSin = $Sin * -1;
-      $stream .= "BT /$Font $fontSize Tf\n"
-               . "$Cos $Sin $negSin $Cos $xFrom $y Tm\n"
-               . "($TxT) Tj ET\n";   
+  
+     my $radian = sprintf("%.6f", $rot / 57.2957795);    # approx. 
+     my $Cos    = sprintf("%.6f", cos($radian));
+     my $Sin    = sprintf("%.6f", sin($radian));
+     my $negSin = $Sin * -1;
+  
+     $stream .=   "\nq\n"		                    # enter a new stack frame
+                # . "/Gs0 gs\n"	                            # reset graphic mode
+                . "$Cos $Sin $negSin $Cos $xPos $yPos cm\n" # rotation/translation in the CM
+                . "\nBT /$Font $fontSize Tf " 
+                . "$x_align_offset 0 Td \($TxT\) Tj ET\n"   # text @ 0,0
+                . "Q\n";                                    # close the stack frame
   }
-
   if (! $pos)
   {  errLog("No output file, you have to call prFile first");
   }
-
+    
+      
   if (wantarray)
-  {   return ($xFrom, $xTo);
-  }      
+  {  # return a new "cursor" position...
+  
+     if($rot==0)
+     {  if($align eq 'left')
+        {   return ($xPos, $xPos + $width);
+        }
+        elsif($align eq 'center')
+        { return ($xPos - $x_align_offset, $xPos + $x_align_offset);
+        }
+        elsif($align eq 'right')
+        {   return ($xPos - $width, $xPos);
+        }
+  
+     } 
+     else 
+     {   # todo
+         # we could some trigonometry to return an x/y point
+         return 1;
+     }
+  }
   else
-  {   return 1;
-  }  
+  {  return 1;
+  }
+   
 }
 
 
@@ -575,8 +615,8 @@ sub prForm
            }
         }
         elsif (! defined $refNr)
-        {  my $mess = "$fSource can't be used as a form. Try e.g. to\n"
-                    . "save the file as postscript, and redistill\n";
+        {  my $mess = "$fSource can't be used as a form. See the documentation\n"
+                    . "under prForm how to concatenate streams\n";
            errLog($mess);
         }
         else
@@ -598,8 +638,8 @@ sub prForm
      }
      else
      {  if (! $form{$fSource}[fVALID])
-        {  my $mess = "$fSource can't be used as a form. Try e.g. to\n"
-                    . "save the file as postscript, and redistill\n";
+        {  my $mess = "$fSource can't be used as a form. See the documentation\n"
+                    . "under prForm how to concatenate streams\n";
            if ($tolerant)
            {  cluck $mess;
               undef $namn;
@@ -750,6 +790,7 @@ sub findFont()
    $aktuellFont[foEXTNAMN]   = $Font;
    $aktuellFont[foREFOBJ]    = $font{$Font}[foREFOBJ];
    $aktuellFont[foINTNAMN]   = $font{$Font}[foINTNAMN];
+   $aktuellFont[foTYP]       = $font{$Font}[foTYP];
    
    $sidFont{$aktuellFont[foINTNAMN]} = $aktuellFont[foREFOBJ];
    if (! $pos)
@@ -1143,7 +1184,7 @@ sub skrivUtNoder
    {  $vektor .= "$_ 0 R "; }
    $vektor .= ']';
    $nodObjekt  = "$slutNod 0 obj<</Type/Pages/Kids $vektor/Count $counts[$si]";
-   $nodObjekt .= "/MediaBox \[$genLowerX $genLowerY $genUpperX $genUpperY\]";
+   # $nodObjekt .= "/MediaBox \[$genLowerX $genLowerY $genUpperX $genUpperY\]";
    $nodObjekt .= " >>endobj\n";
    $objekt[$slutNod] = $pos;
    $pos += syswrite UTFIL, $nodObjekt;
@@ -1209,9 +1250,9 @@ PDF::Reuse - Reuse and mass produce PDF documents
 =for SYNOPSIS.pl begin
 
    use PDF::Reuse;                     
-   prFile('myFile.pdf');                   # Mandatory function
+   prFile('myFile.pdf');
    prText(100, 500, 'Hello World !');
-   prEnd();                                # Mandatory function to flush buffers
+   prEnd();
 
 =for end
 
@@ -1224,7 +1265,7 @@ per second and very big PDF documents if necessary.
 
 The module produces PDF-1.4 files. Some features of PDF-1.5, like "object streams"
 and "cross reference streams", are supported, but only at an experimental level. More
-testing is needed. (If you get problems with a new document from Acrobat 6.0, try to 
+testing is needed. (If you get problems with a new document from Acrobat 6 or 7, try to 
 save it or recreate it as a PDF-1.4 document first, before using it together with 
 this module.) 
 
@@ -1244,16 +1285,6 @@ but visual tools are often most practical.)
 The module uses "XObjects" extensively. This is a format that makes it possible
 create big lists, which are compact at the same time.
 
-=item JavaScript
-
-You can attach JavaScripts to your PDF-files, and "initiate" them (Acrobat 5.0, 
-Acrobat Reader 5.0.5 or higher).
-
-You can have libraries of JavaScripts. No cutting or pasting, and those who include 
-the scripts in documents only need to know how to initiate them. (Of course those
-who write the scripts have to know Acrobat JavaScript well.)
-
-See Remarks about Javascript
 
 =item PDF-operators
 
@@ -1266,35 +1297,106 @@ own libraries of low level routines, with PDF-directives "controlled" by Perl.
 If you want, you get your new documents logged in a format suitable for archiving 
 or transfer.
 
-=back
 
 PDF::Reuse::Tutorial might show you best what you can do with this module.
 
-=head2 Remarks about Javascript
+=item JavaScript
 
-If your user has Acrobat Reader 5.0.5 or higher, he/she should be able to use the 
-functions with JavaScript. The Reader should have the option "Allow File Open
-Actions and Launching File Attachments" checked under "Preferences".
+You can attach JavaScripts to your PDF-files.
 
-If he/she uses Acrobat there is a complication. Everything should work fine as long
-as new files are not read via the web. Acrobat has a plug in, "webpdf.api", which
-converts documents, also PDF-documents, when they are fetched over the net.
-That is probably a good idea in some cases, but B<it changes the documents, and 
-there is a great risk that JavaScripts are lost>.
+You can have libraries of JavaScripts. No cutting or pasting, and those who include 
+the scripts in documents only need to know how to initiate them. (Of course those
+who write the scripts have to know Acrobat JavaScript well.)
 
-(In cases of real emergency, you can disable the plug in simply by removing it
-from the directory Plug_ins under Acrobat, put it in a safe place, and start Acrobat.
-And put it back before you need it next time.) 
+=back
 
-Anyway, almost every computer has the Reader somewhere, and if it is not of the
-right version, it can be downloaded. So with a little effort, it should be possible
-to use also the functions with JavaScrips on most computers.
+=head2 Remarks about JavaScript
+
+Some of the functions handling JavaScript have to be rewritten for Acrobat 7.
+
+There are many limitations with Acrobat JavaScript, and the rules often change.
+So what works for one version of Acrobat/Reader, might not work for another.
+Another complication is this:
+When documents are downloaded via the net by Acrobat, they are most often
+converted (!) and necessary JavaScripts are lost.
+
 
 =head1 FUNCTIONS
 
 All functions which are successful return specified values or 1.
 
 The module doesn't make any attempt to import anything from encrypted files.
+
+=head1 Overview
+
+To write a program with PDF::Reuse, you need these components:
+
+=begin html
+
+<TABLE  border=1 cellpadding="7">
+  <THEAD bgcolor="lightblue">
+    <TH title="Mandatory">First</TH>
+    <TH title="Slightly deprecated functions for your output">Perhaps*</TH>
+    <TH title="Mandatory">Always</TH>
+    <TH title="If you want to add someting">Any or None</TH>
+    <TH title="Often you need to indicate that you need a new page and possibly from where">Probably**</TH>
+    <TH title="Mandatory">Finally</TH>
+  </THEAD>
+  <TR valign="top" bgcolor="lightgreen">
+    <TD title="To include the module"><B>use PDF::Reuse</B></TD>
+    <TD></TD>
+    <TD title="Finish an old document and direct output for a new document"><B>prFile</B></TD>
+    <TD title="To add new contents, JavaScript, links and so on..">prInitVars<BR>
+        prExtract<BR>
+        prForm<BR>
+        prImage<BR>
+        prJpeg<BR>
+        prFont<BR>
+        prFontSize<BR>
+        prGraphState<BR>
+        prAdd<BR>
+        prText<BR>
+        prJs<BR>
+        prCompress<BR>
+        prMbox<BR>
+        prBookmark<BR>
+        prStrWidth<BR>
+        prLink</TD>
+     <TD title="These functions collect available contents and create the pages">prDoc<BR>
+         prPage<BR>
+         prSinglePage</TD>
+     <TD title="To finish last document and clean up"><B>prEnd</B></TD>
+   <TR valign="top" bgcolor="lightyellow">
+     <TD></TD>
+     <TD>prDocDir*<BR>
+         prLogDir*</TD>
+     <TD></TD>
+     <TD>prDocForm*<BR>
+        prGetLogBuffer*<BR>
+        prBar*<BR>
+        prInit*<BR>
+        prField*<BR>
+        prLog*<BR>
+        prTouchUp*<BR>
+	prVers*<BR>
+        prCid*<BR>
+        prId*<BR>
+        prIdType*<BR></TD>
+      <TD></TD>
+      <TD></TD>
+    </TR>
+    <TR bgcolor="lightgrey">
+      <TD colspan=6> * = internal/ deprecated function</TD>
+    </TR>
+    <TR bgcolor="lightgrey">
+      <TD colspan=6> ** = not needed before prEnd or a new prFile<BR>
+      In those cases prPage is automatically inserted </TD>
+    </TR>
+  </TABLE>
+
+
+
+=end html
 
 =head1 Mandatory Functions
 
@@ -1307,11 +1409,11 @@ Alternative 1:
 Alternative 2 with parameters in an anonymous hash:
 
    prFile ( { Name         => $fileName,
-              HideToolbar  => 1,            # 1 | 0
-              HideMenubar  => 1,            # 1 | 0
-              HideWindowUI => 1,            # 1 | 0
-              FitWindow    => 1,            # 1 | 0
-              CenterWindow => 1   } );      # 1 | 0
+              HideToolbar  => 1,            # 1 or 0
+              HideMenubar  => 1,            # 1 or 0
+              HideWindowUI => 1,            # 1 or 0
+              FitWindow    => 1,            # 1 or 0
+              CenterWindow => 1   } );      # 1 or 0
 
 Alternative 3:
 
@@ -1351,7 +1453,7 @@ to add the resource of the "name object" to the "Resources" of current page.
 
 (In this documentation I often use talk about an "internal name". It denotes a 
 "name object". When PDF::Reuse creates these objects, it assigns Ft1, Ft2, Ft3 ...
-for fonts, Im1, Im2, Im3 for images, Fo1 .. for forms, Cs1 .. for Color spaces,
+for fonts, Ig1, Ig2, Ig3 for images, Fo1 .. for forms, Cs1 .. for Color spaces,
 Pt1 .. for patterns, Sh1 .. for shading directories, Gs0 .. for graphic state
 parameter dictionaries. These names are kept until the program finishes, 
 and my ambition is also to keep the resources available in internal tables.)
@@ -1433,14 +1535,14 @@ but they can be used for many more things. You can e.g. use them to navigate wit
 your data. You can let your users go to external links also, so they can "drill down"
 to other documents.
 
-B<See "Remarks about Javascript">
+B<See "Remarks about JavaScript">
 
 =head2 prCompress		- compress/zip added streams 
 
    prCompress (1)
 
 '1' here is a directive to compress all B<new> streams of the current file. Streams
-which are included with prForm, prDocForm and prDoc are not changed. New 
+which are included with prForm, prDocForm, prDoc or prSinglePage are not changed. New 
 JavaScripts are also created as streams and compressed, if they are at least 100
 bytes long. The streams are compressed in memory, so probably there is a limit of
 how big they can be.
@@ -1465,7 +1567,14 @@ If "first" is not given, 1 is assumed. If "last" is not given, you don't have an
 limit. N.B. The numbering of the pages differs from Acrobat JavaScript. In JavaScript
 the first page has index 0. 
 
-Adds pages from a document to the one you are creating. If it is the first interactive
+Adds pages from a document to the one you are creating.
+N.B. From version 0.32 of this module:
+If there are contents created with with prText, prImage,prAdd, prForm and so on,
+prDoc tries to put the contents on the first extracted page
+from the old document.  
+
+
+If it is the first interactive
 component ( prDoc() or prDocForm() ) the interactive functions are kept and also merged
 with JavaScripts you have added, if any. But, if you specify a first page different than 1
 or a last page, no JavaScript are extracted from the document, because then there is a
@@ -1478,9 +1587,8 @@ risk that an included JavaScript function might refer to something not included.
    prJs('customerResponse.js');           # include a JavaScript file
    prInit('nameAddress(12, 150, 600);');  # init a JavaScript function
    prForm('best.pdf');                    # page 1 from best.pdf
-   prPage();                              # page break
+   prPage();
    prDoc('long.pdf');                     # a document with 11 pages
-   prPage();                              # page break
    prForm('best.pdf');                    # page 1 from best.pdf
    prText(150, 700, 'Customer Data');     # a line of text
    prEnd();
@@ -1498,6 +1606,38 @@ To extract pages 2-3 and 5-7 from a document and create a new document:
             first => 5, 
             last  => 7 });
    prEnd();
+   
+   
+To add a form, image and page number to each page of an 16 pages long document
+(The document Battery.pdf is cropped so each page is fairly small)  You could also have
+used prSinglePage, look at a very similar example under that function.
+
+   use PDF::Reuse;
+   use PDF::Reuse::Util;
+   use strict;
+     
+   prFile('test.pdf');
+     
+     my $pageNumber = 0;
+     
+     for (my $page = 1; $page < 17; $page++)
+     {   $pageNumber++;
+         prForm(  { file =>'Words.pdf',
+                    page => 5,
+                    x    => 150,
+                    y    => 150} );
+                    
+         prImage( { file =>'Media.pdf',
+                    page => 6,
+                    imageNo => 1,
+                    x  => 450,
+                    y  => 450 } );
+         blackText();
+         prText( 360, 250, $pageNumber);
+         prDoc('Battery.pdf', $pageNumber, $pageNumber);
+     }
+   prEnd;
+
 
 =head2 prDocDir		- set directory for produced documents 
 
@@ -1554,9 +1694,12 @@ page can be reused in a much better way. Unfortunately there is an important
 limitation here. "XObjects" can only have single streams. If the page consists
 of many streams, you should concatenate them first. Adobe Acrobat can do that.
 (If it is an important file, take a copy of it first. Sometimes the procedure fails.)
-You open the file with Acrobat and choose the "Touch Up" tool and change anything
-graphic in the page. You could e.g. remove 1 space and put it back. Then you
-save the file.
+Open the document with Acrobat. Then choose the the "TouchUp Text" tool (icon or 
+from the tools menu). Select a line of text somewhere on the page. Right-click the
+mouse. Choose "Attributes".Change font size or anything else, and then you change
+it back to the old value. Save the document.
+If there was no text on the page, use some other "Touch Up" tool.
+
 
    use PDF::Reuse;
    use strict;
@@ -1573,7 +1716,7 @@ save the file.
 (You can use the output from the example in prJs() as input to this example.
 Remember to save that file before closing it.)
 
-B<See Remarks about Javascript>
+B<See Remarks about JavaScript>
 
 =head2 prExtract		- extract an object group 
 
@@ -1587,36 +1730,6 @@ e.g. thermometer.pm, to see how this function can be used.
 When you call this function, the necessary objects will be copied to your new
 PDF-file, and you can refer to them with the new name you receive.
 
-=head2 prField		- assign a value to an interactive field 
-
-	prField ( $fieldName, $value )
-
-B<$fieldName> is an interactive field in the document you are creating.
-It has to be spelled exactly the same way here as it spelled in the document.
-B<$value> is what you want to assigned to the field.
-Put all your sentences with prField early in your script. After prFile and B<before>
-prDoc or prDocForm and of course before prEnd. Each sentence with prField is 
-translated to JavaScript and merged with old JavaScript  
-
-See prDocForm() for an example
-
-If you are going to assign a value to a field consisting of several lines, you
-can write like this:
-
-   my $string = "This is the first line \r second line \n 3:rd line";
-   prField('fieldName', $string);
-
-You can also let '$value' be a  snippet of JavaScript-code that assigns something
-to the field. Then you have to put 'js:' first in "$value" like this:
-
-   my $sentence = encrypt('This will be decrypted by "unPack"(JavaScript) ');
-   prField('Interest_9', "js: unPack('$sentence')");
-
-If you refer to a JavaScript function, it has to be included with prJs first. (The
-JavaScript interpreter will simply not be aware of old functions in the PDF-document,
-when the initiation is done.)
-
-B<The function prField uses JavaScript, so see "Remarks about Javascript">
 
 =head2 prFont		- set current font 
 
@@ -1778,13 +1891,13 @@ page can be reused and referred to as a unit. Unfortunately there is an importan
 limitation here. "XObjects" can only have single streams. If the page consists
 of many streams, you should concatenate them first. Adobe Acrobat can do that.
 (If it is an important file, take a copy of it first. Sometimes the procedure fails.)
-You open the file with Acrobat and choose the "Touch Up" tool and change anything
-graphic in the page. You could e.g. remove 1 space and put it back. Then you
-save the file. You could alternatively save the file as Postscript and redistill it with the
-distiller or with Ghost script, but this is a little more risky. You might loose fonts
-or something else. An other alternative could be to use prDoc() , but then you get all
-the document, and you can only change the appearance of the page with the help of
-JavaScript.
+Open the document with Acrobat. Then choose the "TouchUp Text" tool.
+Select a line of text somewhere. Right-click the mouse. Choose "Attributes".
+Change font size or anything else, and then you change it back to the old value.
+Save the document. You could alternatively save the file as Postscript and redistill
+it with the distiller or with Ghost script, but this is a little more risky. You 
+might loose fonts or something else. An other alternative could be to use prSinglePage().
+
 
    use PDF::Reuse;
    use strict;
@@ -1983,28 +2096,6 @@ page, the two images are scaled and shown.
 In the distribution there is an utility program, 'reuseComponent_pl', which displays
 included images in a PDF-file and their "names".
 
-=head2 prInit		- add JavaScript to be executed at initiation 
-
-   prInit ( $string, $duplicateCode )
-
-B<$string> can be any JavaScript code, but you can only refer to functions included
-with prJs. The JavaScript interpreter will not know other functions in the document.
-Often you can add new things, but you can't remove or change interactive fields,
-because the interpreter hasn't come that far, when initiation is done.
-
-B<$duplicateCode> is undefined or anything. It duplicates the JavaScript code
-which has been used at initiation, so you can look at it from within Acrobat and
-debug it. It makes the document bigger. This parameter is B<deprecated>.
-
-See prJs() for an example
-
-Remark: Avoid to use "return" in the code you use at initiation. If your user has
-downloaded a page with Web Capture, and after that opens a PDF-document where a 
-JavaScript is run at initiation and that JavaScript contains a return-statement,
-a bug occurs. The JavaScript interpreter "exits" instead of returning, the execution
-of the JavaScript might finish to early. This is a bug in Acrobat/Reader 5.
-
-B<The function prInit uses JavaScript, so see "Remarks about Javascript">
 
 =head2 prInitVars		- initiate global variables and internal tables 
 
@@ -2074,18 +2165,10 @@ JavaScript functions: function a (..){ ... } function b (..) { ...} and so on
 If B<$string> doesn't contain '{', B<$string> is interpreted as a filename.
 In that case the file has to consist only of JavaScript functions.
 
-   use PDF::Reuse;
-   use strict;
+  
+B<See "Remarks about JavaScript">
 
-   prFile('myFile.pdf');
-   prJs('customerResponse.js');
-   prInit('nameAddress(0, 100, 700);');
-   prEnd();
-
-
-B<See "Remarks about Javascript">
-
-=head2 prLink    - add a hyperlink
+=head2 prLink    - add a hyper link
 
    prLink( { page   => $pageNo,     # Starting with 1  !
              x      => $x,
@@ -2178,23 +2261,79 @@ In this example a log file with the name 'myFile.pdf.dat' is created in the
 directory 'C:\run'. If that directory doesn't exist, the system tries to create it.
 (But, just as mkdir does, it only creates the last level in a directory tree.)
 
-=head2 prMbox		- define the format (MediaBox) of the current page. 
+=head2 prMbox		- define the format (MediaBox) for a new page. 
 
    prMbox ( $lowerLeftX, $lowerLeftY, $upperRightX, $upperRightY )
 
 If the function or the parameters are missing, they are set to 0, 0, 595, 842 pixels respectively.   
+Only for new pages. Pages created with prDoc and prSinglePage keep their media boxes unchanged.
 
 See prForm() for an example.
 
 
-=head2 prPage		- insert a page break
+=head2 prPage		- create/insert a page
 
    prPage ($noLog)
 
 Don't use the optional parameter, it is only used internally, not to clutter the log,
 when automatic page breaks are made.
 
+
 See prForm() for an example.
+
+=head2 prSinglePage  - take single pages, one by one, from an old document
+
+   prSinglePage($file, $pageNumber)
+
+$pageNumber is optional. If not given, next page is assumed 
+Returns number of remaining pages.
+This function is a variant of prDoc for single pages, with the addition that it
+has a counter of last page read, and total number of pages of the old document,
+so it can be used to loop through a document.
+
+   
+To add a form, image and page number to each page of a document
+(The document Battery.pdf is cropped so each page is fairly small)  You could also have
+used prDoc, but only if you knew in advance the number of pages of the old document
+
+   use PDF::Reuse;
+   use PDF::Reuse::Util;
+   use strict;
+      
+   prFile('test.pdf');
+      
+   my $pageNumber = 0;
+   my $left = 1;            # Every valid PDF-document has at least 1 page,
+                            # so that can be assumed  
+    
+   while ($left) 
+   {   $pageNumber++;
+       prForm(  { file =>'Words.pdf',
+                  page => 5,
+                  x    => 150,
+                  y    => 150} );
+                    
+       prImage( { file    =>'Media.pdf',
+                  page    => 6,
+                  imageNo => 1,
+                  x       => 450,
+                  y       => 450 } );
+       blackText();
+       prText( 360, 250, $pageNumber);
+       $left = prSinglePage('Battery.pdf');   
+    } 
+     
+    prEnd;
+
+prSinglePage creates a new page from an old document and adds new content (to the array of
+streams of that page). Most often you can add new contents to the page like the example above,
+and it works fine, but sometimes you get surprises. There can e.g. be instructions in the earlier
+contents to make filling color white, and then you will probably not see added new text. That
+is why PDF::Reuse::Util::blackText() is used in the example. There can be other instructions
+like moving or rotating the user space. Also new contents can end up outside the crop-box.
+Of course all new programs should be tested. If prSinglePage can't be used, try to use prForm
+followed by prPage instead.
+
 
 =head2 prStrWidth   - calculate the string width
 
@@ -2209,16 +2348,17 @@ returned value will at the best be approximate.
 
 =head2 prText		- add a text-string 
 
-   prText ( $x, $y, $string, $how )
+   prText ( $x, $y, $string, $align, $rotation )
 
 Puts B<$string> at position B<$x, $y>
 Returns 1 in scalar context. Returns ($xFrom, $xTo) in list context. $xTo will not
-be defined if $how is a rotation. prStrWidth() is used to calculate the length of the
+be defined together with a rotation. prStrWidth() is used to calculate the length of the
 strings, so only the predefined fonts together with Acrobat/Reader will give
 reliable values for $xTo.      
 
-$how can be 'left' (= default), 'center', 'right', a degree 0 - 360, 'q1', 'q2' 
-or 'q3'. The parameter is optional.
+$align can be 'left' (= default), 'center' or 'right'. The parameter is optional.
+
+$rotation can be a degree 0 - 360, 'q1', 'q2' or 'q3'. Also optional.
 
 Current font and font size are used. (If you use prAdd() before this function,
 many other things could also influence the text.)
@@ -2252,40 +2392,26 @@ many other things could also influence the text.)
    # Rotation
    ############
 
-   prText( 200, 550, ' Rotate 0 degrees', 0);
-   prText( 200, 550, ' Rotate 60 degrees', 60);
-   prText( 200, 550, ' Rotate 120 degrees', 120);
-   prText( 200, 550, ' Rotate 180 degrees', 180);
-   prText( 200, 550, ' Rotate 240 degrees', 240);
-   prText( 200, 550, ' Rotate 300 degrees', 300);
+   prText( 200, 550, ' Rotate 0 degrees','', 0);
+   prText( 200, 550, ' Rotate 60 degrees','', 60);
+   prText( 200, 550, ' Rotate 120 degrees','', 120);
+   prText( 200, 550, ' Rotate 180 degrees','', 180);
+   prText( 200, 550, ' Rotate 240 degrees','', 240);
+   prText( 200, 550, ' Rotate 300 degrees','', 300);
 
-   prText( 400, 430, 'Rotate 90 degrees clock-wise', 'q1');
-   prText( 400, 430, 'Rotate 180 degrees clock-wise', 'q2');
-   prText( 400, 430, 'Rotate 270 degrees clock-wise', 'q3');
-
+   prText( 400, 430, 'Rotate 90 degrees clock-wise','','q1');
+   prText( 400, 430, 'Rotate 180 degrees clock-wise','', 'q2');
+   prText( 400, 430, 'Rotate 270 degrees clock-wise','', 'q3');
+   
+   ##########################
+   # Rotate and right adjust
+   ##########################
+   
+   prText( 200, 230, 'Rotate 90 degrees clock-wise ra->','right','q1');
+   prText( 200, 230, 'Rotate 180 degrees clock-wise ra->','right', 'q2');
+   prText( 200, 230, 'Rotate 270 degrees clock-wise ra->','right', 'q3');
+   
    prEnd();
-
-
-=head2 prTouchUp		- make changes and reuse more difficult 
-
-   prTouchUp (1);
-
-By default and after you have issued prTouchUp(1), you can change the document
-with the TouchUp tool from within Acrobat.
-If you want to switch off this possibility, you use prTouchUp() without any 
-parameter.  Then the user shouldn't be able to change anything graphic by mistake.
-He has to do something premeditated and perhaps with a little effort.
-He could still save it as Postscript and redistill, or he could remove or add single pages. 
-(Here is a strong reason why the log files, and perhaps also check sums, are needed.
-It would be very difficult to forge a document unless the forger also has access to your
-computer and knows how the check sums are calculated.)
-
-B<Avoid to switch off the TouchUp tool for your templates.> It creates an
-extra level within the PDF-documents . Use this function for your final documents.
-
-See "Using the template" in the tutorial for an example. 
-
-(To encrypt your documents: use the batch utility within Acrobat)
 
 
 =head1 INTERNAL OR DEPRECATED FUNCTIONS
@@ -2301,7 +2427,7 @@ Returns $internalName for the font.
 $x and $y are coordinates in pixels and $string should consist of the characters
 '0', '1' and '2' (or 'G'). '0' is a white bar, '1' is a dark bar. '2' and 'G' are
 dark, slightly longer bars, guard bars. 
-You can use e.g. GD::Barcode or one module in that group to calculate the barcode
+You can use e.g. GD::Barcode or one module in that group to calculate the bar code
 pattern. prBar "translates" the pattern to white and black bars.
 
    use PDF::Reuse;
@@ -2319,10 +2445,10 @@ this function. In that case, use prFontSize() .
 If you call this function without arguments it defines the bar font but does
 not write anything to the current page.
 
-B<An easier and often better way to produce barcodes is to use PDF::Reuse::Barcode.> 
+B<An easier and often better way to produce bar codes is to use PDF::Reuse::Barcode.> 
 Look at that module!
 
-=item prCid		- define timestamp/checkid 
+=item prCid		- define time stamp/check id 
 
    prCid ( $timeStamp )
 
@@ -2331,6 +2457,38 @@ routines when you want to restore a document. It gives modification time of
 the next PDF-file or JavaScript.
 See "Restoring a document from the log" in the tutorial for more about the
 time stamp
+
+
+=item prField		- assign a value to an interactive field 
+
+	prField ( $fieldName, $value )
+
+B<$fieldName> is an interactive field in the document you are creating.
+It has to be spelled exactly the same way here as it spelled in the document.
+B<$value> is what you want to assigned to the field.
+Put all your sentences with prField early in your script. After prFile and B<before>
+prDoc or prDocForm and of course before prEnd. Each sentence with prField is 
+translated to JavaScript and merged with old JavaScript  
+
+See prDocForm() for an example
+
+If you are going to assign a value to a field consisting of several lines, you
+can write like this:
+
+   my $string = "This is the first line \r second line \n 3:rd line";
+   prField('fieldName', $string);
+
+You can also let '$value' be a  snippet of JavaScript-code that assigns something
+to the field. Then you have to put 'js:' first in "$value" like this:
+
+   my $sentence = encrypt('This will be decrypted by "unPack"(JavaScript) ');
+   prField('Interest_9', "js: unPack('$sentence')");
+
+If you refer to a JavaScript function, it has to be included with prJs first. (The
+JavaScript interpreter will simply not be aware of old functions in the PDF-document,
+when the initiation is done.)
+
+This function needs to be rewritten fot Acrobat 7
 
 =item prId		- define id-string of a PDF document 
 
@@ -2349,24 +2507,61 @@ An internal function. Avoid using it. B<$string> could be "Rep" for replace or
 Normally you don't use this function. Then an id is calculated with the help of
 Digest::MD5::md5_hex and some data from the run.
 
-=item prMoveTo 
+=item prInit		- add JavaScript to be executed at initiation 
 
-   prMoveTo ( $x, $y )
+   prInit ( $string, $duplicateCode )
 
-B<Deprecated> This function will be removed during 2004. You can define positions
-with parameters directly to prImage(), prForm() and prDocForm(). 
+B<$string> can be any JavaScript code, but you can only refer to functions included
+with prJs. The JavaScript interpreter will not know other functions in the document.
+Often you can add new things, but you can't remove or change interactive fields,
+because the interpreter hasn't come that far, when initiation is done.
 
-Defines positions where to put e.g. next image
+B<$duplicateCode> is undefined or anything. It duplicates the JavaScript code
+which has been used at initiation, so you can look at it from within Acrobat and
+debug it. It makes the document bigger. This parameter is B<deprecated>.
 
-=item prScale 
+   use PDF::Reuse;
+   use strict;
 
-   prScale ( $xSize, $ySize )
+   prFile('myFile.pdf');
+   prJs('customerResponse.js');
+   prInit('nameAddress(0, 100, 700);');
+   prEnd();
 
-B<Deprecated> This function will be removed during 2004. You can define sizes
-with parameters directly to prImage(), prForm() and prDocForm().
 
-Each of $xSize and $ySize are set to 1 if missing. You can use this function to
-scale an image before showing it.
+
+This function has to be rewritten for Acrobat 7.
+
+Remark: Avoid to use "return" in the code you use at initiation. If your user has
+downloaded a page with Web Capture, and after that opens a PDF-document where a 
+JavaScript is run at initiation and that JavaScript contains a return-statement,
+a bug occurs. The JavaScript interpreter "exits" instead of returning, the execution
+of the JavaScript might finish to early. This is a bug in Acrobat/Reader 5.
+
+
+=item prTouchUp		- make changes and reuse more difficult 
+
+   prTouchUp (1);
+
+By default and after you have issued prTouchUp(1), you can change the document
+with the TouchUp tool from within Acrobat.
+If you want to switch off this possibility, you use prTouchUp() without any 
+parameter.  Then the user shouldn't be able to change anything graphic by mistake.
+He has to do something premeditated and perhaps with a little effort.
+He could still save it as Postscript and redistill, or he could remove or add single pages. 
+(Here is a strong reason why the log files, and perhaps also check sums, are needed.
+It would be very difficult to forge a document unless the forger also has access to your
+computer and knows how the check sums are calculated.)
+
+B<Avoid to switch off the TouchUp tool for your templates.> It creates an
+extra level within the PDF-documents . Use this function for your final documents.
+
+See "Using the template" in the tutorial for an example.
+
+This function works for pages created with prPage, but mot with prDoc and prSinglePage,
+So it is more or less deprecated as these function have developed. 
+
+(To encrypt your documents: use the batch utility within Acrobat)
 
 
 =item prVers		- check version of log and program 
@@ -2386,7 +2581,7 @@ restored.
    PDF::Reuse::OverlayChart
 
 To program with PDF-operators, look at "The PDF-reference Manual" which probably
-is possible to download from http://partners.adobe.com/asn/developer/acrosdk/docs.html
+is possible to download from http://partners.adobe.com/asn/tech/pdf/specifications.jsp
 Look especially at chapter 4 and 5, Graphics and Text, and the Operator summary.
 
 Technical Note # 5186 contains the "Acrobat JavaScript Object Specification". I 
@@ -2412,7 +2607,7 @@ To get definitions for e.g. colors, take them from
 
 =head1 LIMITATIONS
 
-Metadata, info and many other features of the PDF-format have not been
+Meta data, info and many other features of the PDF-format have not been
 implemented in this module. 
 
 Many things can be added afterwards, after creating the files. If you e.g. need
@@ -2452,16 +2647,21 @@ and a simple cash, PDF would be just superior for repeated tasks.
 
 =head1 THANKS TO
 
-Martin Langhoff and others who have contributed with code, suggestions and error
+Martin Langhoff, Matisse Enzer and others who have contributed with code, suggestions and error
 reports.
+
+The functionality of prDoc and prSinglePage to include new contents was developed for a
+specific task with support from the Electoral Enrolment Centre, Wellington, New Zealand
 
 =head1 AUTHOR
 
-Lars Lundberg elkelund @ worldonline . se
+Lars Lundberg larslund@cpan.org
 
-=head1 COPYRIGHT
+=head1 COPYRIGHT 
 
-Copyright (C) 2003 - 2004 Lars Lundberg, Solidez HB. All rights reserved.
+Copyright (C) 2003 - 2004 Lars Lundberg, Solidez HB.
+
+Copyright (C) 2005 Karin Lundberg. All rights reserved.
 This program is free software; you can redistribute it and/or
 modify it under the same terms as Perl itself.
 
@@ -2474,6 +2674,39 @@ for any damage, loss of money and/or health that may arise from the use of this 
 
 =cut
 
+sub prSinglePage
+{ my $infil      = shift;
+  my $pageNumber = shift;
+      
+  if (! defined $pageNumber)
+  {   $behandlad{$infil}->{pageNumber} = 0
+        unless (defined $behandlad{$infil}->{pageNumber});
+      $pageNumber = $behandlad{$infil}->{pageNumber} + 1;
+  }    
+    
+  my ($sida, $Names, $AARoot, $AcroForm) = analysera($infil, $pageNumber, $pageNumber, 1);
+  if (($Names) || ($AARoot) || ($AcroForm))
+  { $NamesSaved     = $Names;
+    $AARootSaved    = $AARoot;
+    $AcroFormSaved  = $AcroForm;
+    $interActive    = 1;
+  }
+  if (defined $sida)
+  {  $behandlad{$infil}->{pageNumber} = $pageNumber;
+  }
+  if ($runfil)
+  {   $infil = prep($infil);
+      $log .= "prSinglePage~$infil~$pageNumber\n";
+  }
+  if (! $pos)
+  {  errLog("No output file, you have to call prFile first");
+  }
+  return $sida;
+
+}
+
+
+
 sub prLink
 { my %link;
   my $param = shift;
@@ -2483,15 +2716,17 @@ sub prLink
      $link{y}      = $param->{'y'}    || 100;
      $link{width}  = $param->{width}  || 75;
      $link{height} = $param->{height} || 15;
-     $link{URI}    = $param->{URI};
+     $link{v}      = $param->{URI};
+     $link{s}      = $param->{s} || "URI";
   }
   else
   {  $link{page}   = $param || -1;
-     $link{x}      = shift || 100;
-     $link{y}      = shift || 100;
-     $link{width}  = shift || 75;
-     $link{height} = shift || 15;
-     $link{URI}    = shift;
+     $link{x}      = shift  || 100;
+     $link{y}      = shift  || 100;
+     $link{width}  = shift  || 75;
+     $link{height} = shift  || 15;
+     $link{v}      = shift;
+     $link{s}      = shift  || "URI";
   }
 
   if (! $pos)
@@ -2500,10 +2735,10 @@ sub prLink
 
   if ($runfil)
   {  $log .= "Link~$link{page}~$link{x}~$link{y}~$link{width}~" 
-          . "$link{height}~$link{URI}\n";
+          . "$link{height}~$link{v}~$link{s}\n";
   }
   
-  if ($link{URI})
+  if ($link{v})
   {  push @{$links{$link{page}}}, \%link;
   }
   1;
@@ -2516,15 +2751,35 @@ sub mergeLinks
     for my $link (@{$links{'-1'}}, @{$links{$tSida}} )
     {   my $x2 = $link->{x} + $link->{width};
         my $y2 = $link->{y} + $link->{height};
-        if (exists $links{$link->{URI}})
-        {   $linkObjectNo = $links{$link->{URI}};
+        if (exists $links{$link->{v}})
+        {   $linkObjectNo = $links{$link->{v}};
         }
         else
         {   $objNr++;
             $objekt[$objNr] = $pos;
-            $rad = "$objNr 0 obj<</S/URI/URI($link->{URI})>>endobj\n";
+            my $v_n;
+            my $v_v = '('.$link->{v}.')';
+            if    ($link->{s} eq 'GoTo')       
+            {   $v_n = "D";
+            }
+            elsif ($link->{s} eq 'GoToA')      
+            {   $link->{s} = 'GoTo';
+                $v_n       = 'D';
+                $v_v       = $link->{v};
+            }
+            elsif ($link->{s} eq 'Launch')     {$v_n = 'F';}
+            elsif ($link->{s} eq 'SubmitForm') {$v_n = 'F';}
+            elsif ($link->{s} eq 'Named')      
+            {   $v_n = 'N';
+                $v_v = $link->{v};
+            }
+            elsif ($link->{s} eq 'JavaScript') {$v_n = "JS";}
+            else                               
+            {   $v_n = $link->{s};
+            }
+            $rad = "$objNr 0 obj<</S/$link->{s}/$v_n$v_v>>endobj\n";
             $linkObjectNo = $objNr;
-            $links{$link->{URI}} = $objNr;
+            $links{$link->{v}} = $objNr;
             $pos += syswrite UTFIL, $rad;
         }
         $rad = "/Subtype/Link/Rect[$link->{x} $link->{y} "
@@ -2841,8 +3096,8 @@ sub prImage
   my $iSource = $fSource . '_' . $bildnr;
   if (! exists $image{$iSource})
   {  $imageNr++;
-     $inamn = 'Im' . $imageNr;
-     $knownToFile{'Im:' . $iSource} = $inamn;
+     $inamn = 'Ig' . $imageNr;
+     $knownToFile{'Ig:' . $iSource} = $inamn;
      $image{$iSource}[imXPOS]   = 0;
      $image{$iSource}[imYPOS]   = 0;
      $image{$iSource}[imXSCALE] = 1;
@@ -2854,7 +3109,7 @@ sub prImage
            my $namn = 'Fm' . $formNr;
            $knownToFile{$fSource} = $namn;
         }
-        elsif ($refNr eq '0')
+        elsif ((defined $refNr) && ($refNr eq '0'))
         {  errLog("File: $infil  Page: $sidnr can't be found");
         }          
      }
@@ -2863,13 +3118,13 @@ sub prImage
      $image{$iSource}[imHEIGHT] = $form{$fSource}->[fOBJ]->{$in}->[oHEIGHT];
      $image{$iSource}[imIMAGENO] = $form{$fSource}[fIMAGES][$bildIndex];
   }
-  if (exists $knownToFile{'Im:' . $iSource})
-  {   $inamn = $knownToFile{'Im:' . $iSource};
+  if (exists $knownToFile{'Ig:' . $iSource})
+  {   $inamn = $knownToFile{'Ig:' . $iSource};
   }
   else
   {   $imageNr++;
-      $inamn = 'Im' . $imageNr;
-      $knownToFile{'Im:' . $iSource} = $inamn;
+      $inamn = 'Ig' . $imageNr;
+      $knownToFile{'Ig:' . $iSource} = $inamn;
   }
   if (! exists $objRef{$inamn})         
   {  $refNr = getImage($infil,  $sidnr, 
@@ -3044,16 +3299,6 @@ sub prDoc
      $last  = shift || '';     
   }
   
-  if ($stream)
-  {  if ($stream =~ m'\S+'os)
-     {  skrivSida();}
-     else
-     {  undef $stream; }
-  }
-   
-  if (! $objekt[$objNr])         # Objektnr behöver inte reserveras här
-  { $objNr--;
-  }
   
   my ($sidor, $Names, $AARoot, $AcroForm) = analysera($infil, $first, $last);
   if (($Names) || ($AARoot) || ($AcroForm))
@@ -3133,8 +3378,8 @@ sub prDocForm
            }
         }
         elsif (! defined $refNr)
-        {  my $mess = "$fSource can't be used as a form. Try e.g. to\n"
-                    . "save the file as postscript, and redistill\n";
+        {  my $mess = "$fSource can't be used as a form. See the documentation\n"
+                    . "under prForm how to concatenate streams\n";
            errLog($mess);
         }
         else
@@ -3156,8 +3401,8 @@ sub prDocForm
      }
      else
      {  if (! $form{$fSource}[fVALID])
-        {  my $mess = "$fSource can't be used as a form. Try e.g. to\n"
-                    . "concatenate the streams of the page\n";
+        {  my $mess = "$fSource can't be used as a form. See the documentation\n"
+                    . "under prForm how to concatenate streams\n";
            if ($tolerant)
            {  cluck $mess;
               undef $namn;
@@ -3309,7 +3554,7 @@ sub prJpeg
    if ($iFile)
    {  $iLangd = (stat($iFile))[7];
       $imageNr++;
-      $namnet = 'Im' . $imageNr;
+      $namnet = 'Ig' . $imageNr;
       $objNr++;
       $objekt[$objNr] = $pos;
       open (BILDFIL, "<$iFile") || errLog("Couldn't open $iFile, $!, aborts");
@@ -4397,6 +4642,9 @@ sub getPage
                   $font{$Font}[foORIGINALNR]       = $gammal;
                   $fontSource{$Font}[foSOURCE]     = $fSource;
                   $fontSource{$Font}[foORIGINALNR] = $gammal;
+                  if ($objektet =~ m'/Subtype\s*/Type0'os)
+                  {  $font{$Font}[foTYP] = 1;
+                  }
                   if ($action eq 'print')
                   {  $font{$Font}[foREFOBJ]  = $ny;
                      $objRef{'Ft' . $fontNr} = $ny;
@@ -4564,6 +4812,17 @@ sub kolla
    }
   
    if ($obj =~ m'/Contents\s+(\d+)'so)
+   {  $formCont = $1;
+      my $cObj = getObject($formCont, 1, 1);
+      if ($cObj =~ m'^\s*\[[^\]]+\]\s*$'os)
+      {   $valid = 0;
+          undef $formCont;
+      }
+      else
+      {   $valid    = 1;
+      }
+   }
+   elsif ($obj =~ m'/Contents\s*\[\s*(\d+)\s{1,2}\d+\s{1,2}R\s*\]'so)
    { $formCont = $1;
      $valid    = 1;
    }
@@ -5052,6 +5311,9 @@ sub extractName
             $Font = 'Ft' . $fontNr;
             $font{$extNamn}[foINTNAMN]       = $Font;
             $font{$extNamn}[foORIGINALNR]    = $nr;
+            if ($del1 =~ m'/Subtype\s*/Type0'os)
+            {  $font{$extNamn}[foTYP] = 1;
+            }
             $fontSource{$Font}[foSOURCE]     = $fSource;
             $fontSource{$Font}[foORIGINALNR] = $nr;            
          }
@@ -5086,7 +5348,7 @@ sub extractName
    }
    elsif ($resType eq 'XObject')
    {  if (defined $form{$fSource}->[0]->{$nr}->[oIMAGENR])
-      {  $namn = 'Im' . $form{$fSource}->[0]->{$nr}->[oIMAGENR];
+      {  $namn = 'Ig' . $form{$fSource}->[0]->{$nr}->[oIMAGENR];
       }
       else
       {  $formNr++;
@@ -5206,6 +5468,9 @@ sub extractObject
          $Font = 'Ft' . $fontNr;
          $font{$extNamn}[foINTNAMN]    = $Font;
          $font{$extNamn}[foORIGINALNR] = $key;
+         if ($del1 =~ m'/Subtype\s*/Type0'os)
+         {  $font{$extNamn}[foTYP] = 1;
+         }
          if ( ! defined $fontSource{$extNamn}[foSOURCE])
          {  $fontSource{$extNamn}[foSOURCE]     = $fSource;
             $fontSource{$extNamn}[foORIGINALNR] = $key;            
@@ -5241,7 +5506,7 @@ sub extractObject
    }
    elsif ($typ eq 'XObject')
    {  if (defined $form{$fSource}->[0]->{$nr}->[oIMAGENR])
-      {  $namn = 'Im' . $form{$fSource}->[0]->{$nr}->[oIMAGENR];
+      {  $namn = 'Ig' . $form{$fSource}->[0]->{$nr}->[oIMAGENR];
       }
       else
       {  $formNr++;
@@ -5303,6 +5568,7 @@ sub analysera
 {  my $infil = shift;
    my $from  = shift || 1;
    my $to    = shift || 0;
+   my $singlePage = shift;
    my ($i, $res, @underObjekt, @sidObj, $vektor, $resources, $valid,
        $strPos, $sidor, $filId, $Root, $del1, $del2, $utrad);
 
@@ -5394,9 +5660,11 @@ sub analysera
  
    if ($objektet =~ m'/Pages\s+(\d+)\s{1,2}\d+\s{1,2}R'os)
    {  $objektet = getObject($1);
-      ($resources, $valid) = kolla($objektet);
+      $resources = checkResources($objektet, $resources);
       if ($objektet =~ m'/Count\s+(\d+)'os)
-      {  $sidor = $1; }   
+      {  $sidor = $1;
+         $behandlad{$infil}->{sidor} = $sidor;
+      }   
    }
    else
    { errLog("Didn't find pages "); }
@@ -5417,9 +5685,9 @@ sub analysera
    {  if (scalar @{$levels[$li]})
       {   my $j = shift @{$levels[$li]};
           $objektet = getObject($j);
-          ($resources, $valid) = kolla($objektet, $resources); 
           if ($objektet =~ m'/Kids\s*\[([^\]]+)'os)
-          {  $vektor = $1; 
+          {  $resources = checkResources($objektet, $resources);
+             $vektor = $1; 
              my @sObj; 
              while ($vektor =~ m'(\d+)\s{1,2}\d+\s{1,2}R'go)
              {   push @sObj, $1;       
@@ -5493,21 +5761,271 @@ sub analysera
   }
   close INFIL;
   $processed{$infil}->{root}         = $root;
-
-  return ($extraherade, $Names, $AARoot, $AcroForm);
+  
+  if (! $singlePage)
+  {   return ($extraherade, $Names, $AARoot, $AcroForm);
+  }
+  else
+  {   if ($extraherade)
+      {   my $kvar = $behandlad{$infil}->{sidor} - $from;
+          return ($kvar, $Names, $AARoot, $AcroForm);
+      }
+      else
+      {   return (undef, undef, undef, undef);
+      }
+  }
 }
 
 sub sidAnalys
 {  my ($oNr, $obj, $resources) = @_;
-   my ($ny, $strPos, $spar, $closeProc, $del1, $del2, $utrad, $Annots);
+   my ($ny, $strPos, $spar, $closeProc, $del1, $del2, $utrad, $Annots,
+   $resursObjekt, $streamObjekt, @extObj, $langd);
+
+   if ((defined $stream) && (length($stream) > 0))
+   {               
+       if ($checkCs)
+       {  @extObj = ($stream =~ m'/(\S+)\s*'gso);
+          checkContentStream(@extObj);
+       }
+
+       $objNr++;
+       $objekt[$objNr] = $pos; 
+
+       if (( $compress ) && ( length($stream)  > 99 ))
+       {   my $output = compress($stream);
+           if ((length($output) > 25) && (length($output) < (length($stream))))
+           {  $stream = $output;
+           }
+           $langd = length($stream);
+           $stream = "\n" . $stream . "\n";
+           $langd++;
+           $streamObjekt  = "$objNr 0 obj<</Filter/FlateDecode"
+                             . "/Length $langd>>stream" . $stream;
+           $streamObjekt .= "endstream\nendobj\n";
+       
+       }
+       else
+       {  $langd = length($stream);
+          $streamObjekt  = "$objNr 0 obj<</Length $langd>>stream\n" . $stream;
+          $streamObjekt .= "\nendstream\nendobj\n";
+       }
+       $pos += syswrite UTFIL, $streamObjekt;
+       $streamObjekt = "$objNr 0 R ";
+
+       ########################################################################
+       # Sometimes the contents reference is a ref to an object which 
+       # contains an array of content streams. Replace the ref with the array 
+       ########################################################################
+
+       if ($obj =~ m'/Contents\s+(\d+)\s{1,2}\d+\s{1,2}R'os)
+       {   my $cObj = getObject($1, 1, 1);
+           if ($cObj =~ m'^\s*\[[^\]]+\]\s*$'os)
+           {   $obj =~ s|/Contents\s+\d+\s{1,2}\d+\s{1,2}R|'/Contents ' . $cObj|oes;
+           }
+       }
+
+       my ($from, $to); 
+       
+       ($resources, $from, $to) = checkResources ($obj, $resources);
+       if ($from && $to)
+       {   $obj = substr($obj, 0, $from) . substr($obj, $to);
+       }
+
+       
+       ##########################
+       # Hitta resursdictionary
+       ##########################
+       my $i = 0;
+       while (($resources !~ m'\/'os) && ($i < 10))
+       {   $i++;
+           if ($resources =~ m'\s+(\d+)\s{1,2}\d+\s{1,2}R'os)
+           {   $resources = getObject($1, 1, 1);
+           }
+       }
+       if ($i > 7)
+       {  errLog("Couldn't find resources to merge");
+       } 
+       if ($resources =~ m'\s*\<\<(.*)\>\>'os)
+       {  $resources = $1;
+       }
+        
+       if ($resources !~ m'/ProcSet')
+       {  $resources =  '/ProcSet[/PDF/Text] ' . $resources;
+       }
+       
+       ###############################################################
+       # Läsa ev. referenser och skapa ett resursobjekt bestående av
+       # dictionaries (för utvalda resurser)
+       ###############################################################
+
+       if (scalar %sidFont)
+       {  if ($resources =~ m'/Font\s+(\d+)\s{1,2}\d+\s{1,2}R'os)
+          {   my $dict = getObject($1, 1, 1);
+              $resources =~ s"/Font\s+\d+\s{1,2}\d+\s{1,2}R"'/Font' . $dict"ose;
+          }
+       }
+       
+       if (scalar %sidXObject)
+       {  if ($resources =~ m'/XObject\s+(\d+)\s{1,2}\d+\s{1,2}R'os)
+          {   my $dict = getObject($1, 1, 1);
+              $resources =~ s"/XObject\s+\d+\s{1,2}\d+\s{1,2}R"'/XObject' . $dict"ose;
+          }
+       }
+
+       if (scalar %sidExtGState)
+       {  if ($resources =~ m'/ExtGState\s+(\d+)\s{1,2}\d+\s{1,2}R'os)
+          {   my $dict = getObject($1, 1, 1);
+              $resources =~ s"/ExtGState\s+\d+\s{1,2}\d+\s{1,2}R"'/ExtGState' . $dict"ose;
+          }
+       }
+ 
+       if (scalar %sidPattern)
+       {  if ($resources =~ m'/Pattern\s+(\d+)\s{1,2}\d+\s{1,2}R'os)
+          {   my $dict = getObject($1, 1, 1);
+              $resources =~ s"/Pattern\s+\d+\s{1,2}\d+\s{1,2}R"'/Pattern' . $dict"ose;
+          }
+       }
+
+       if (scalar %sidShading)
+       {  if ($resources =~ m'/Shading\s+(\d+)\s{1,2}\d+\s{1,2}R'os)
+          {   my $dict = getObject($1, 1, 1);
+              $resources =~ s"/Shading\s+\d+\s{1,2}\d+\s{1,2}R"'/Shading' . $dict"ose;
+          }
+       }
+
+       if (scalar %sidColorSpace)
+       {  if ($resources =~ m'/ColorSpace\s+(\d+)\s{1,2}\d+\s{1,2}R'os)
+          {   my $dict = getObject($1, 1, 1);
+              $resources =~ s"/ColorSpace\s+\d+\s{1,2}\d+\s{1,2}R"'/ColorSpace' . $dict"ose;
+          }
+       }
+       ####################################################
+       # Nu är resurserna "normaliserade" med ursprungliga
+       # värden. Spara värden för "översättning"
+       ####################################################
+       
+       $resources =~ s/\b(\d+)\s{1,2}\d+\s{1,2}R\b/xform() . ' 0 R'/oegs;
+
+       ###############################
+       # Komplettera med nya resurser
+       ###############################
+
+       if (scalar %sidFont)
+       {  my $str = '';
+          for (keys %sidFont)
+          {  $str .= "/$_ $sidFont{$_} 0 R";
+          }
+          if ($resources !~ m'\/Font'os)
+          {   $resources =  "/Font << $str >> " . $resources;
+          }
+          else
+          {   $resources =~ s"/Font\s*<<"'/Font<<' . $str"oges;
+          }
+       }
+
+       if (scalar %sidXObject)
+       {  my $str = '';
+          for (keys %sidXObject)
+          {  $str .= "/$_ $sidXObject{$_} 0 R";
+          }
+          if ($resources !~ m'\/XObject'os)
+          {   $resources =  "/XObject << $str >> " . $resources;
+          }
+          else
+          {   $resources =~ s"/XObject\s*<<"'/XObject<<' . $str"oges;
+          }
+       }
+       
+       if (scalar %sidExtGState)
+       {  my $str = '';
+          for (keys %sidExtGState)
+          {  $str .= "/$_ $sidExtGState{$_} 0 R";
+          }
+          if ($resources !~ m'\/ExtGState'os)
+          {   $resources =  "/ExtGState << $str >> " . $resources;
+          }
+          else
+          {   $resources =~ s"/ExtGState\s*<<"'/ExtGState<<' . $str"oges;
+          }
+       }
+   
+       if (scalar %sidPattern)
+       {  my $str = '';
+          for (keys %sidPattern)
+          {  $str .= "/$_ $sidPattern{$_} 0 R";
+          }
+          if ($resources !~ m'\/Pattern'os)
+          {   $resources =  "/Pattern << $str >> " . $resources;
+          }
+          else
+          {   $resources =~ s"/Pattern\s*<<"'/Pattern<<' . $str"oges;
+          }
+       }
+
+       if (scalar %sidShading)
+       {  my $str = '';
+          for (keys %sidShading)
+          {  $str .= "/$_ $sidShading{$_} 0 R";
+          }
+          if ($resources !~ m'\/Shading'os)
+          {   $resources =  "/Shading << $str >> " . $resources;
+          }
+          else
+          {   $resources =~ s"/Shading\s*<<"'/Shading<<' . $str"oges;
+          }
+       }
+
+       if (scalar %sidColorSpace)
+       {  my $str = '';
+          for (keys %sidColorSpace)
+          {  $str .= "/$_ $sidColorSpace{$_} 0 R";
+          }
+          if ($resources !~ m'\/ColorSpace'os)
+          {   $resources =  "/ColorSpace << $str >> " . $resources;
+          }
+          else
+          {   $resources =~ s"/ColorSpace\s*<<"'/ColorSpace<<' . $str"oges;
+          }
+       }
+
+       if (exists $resurser{$resources})
+       {  $resources = "$resurser{$resources} 0 R\n";  # Fanns ett identiskt,
+       }                                               # använd det
+       else
+       {   $objNr++;
+           if ( keys(%resurser) < 10)
+           {  $resurser{$resources} = $objNr;     # Spara 10 första resursobjekten
+           }
+           $objekt[$objNr] = $pos;
+           $resursObjekt   = "$objNr 0 obj<<$resources>>endobj\n";
+           $pos += syswrite UTFIL, $resursObjekt ;
+           $resources      = "$objNr 0 R\n";
+       }
+   
+       %sidXObject    = ();
+       %sidExtGState  = ();
+       %sidFont       = ();
+       %sidPattern    = ();
+       %sidShading    = ();
+       %sidColorSpace = ();
+       undef $checkCs;
+    
+       $stream     = '';
+   }
 
    if (! $parents[0])
    { $objNr++;
      $parents[0] = $objNr;
    }
    my $parent = $parents[0];
-   $objNr++;
-   $ny = $objNr; 
+
+   if (($sidObjNr) && (! defined $objekt[$sidObjNr]))
+   {  $ny = $sidObjNr;
+   }
+   else
+   {  $objNr++;
+      $ny = $objNr;
+   } 
 
    $old{$oNr} = $ny;
      
@@ -5515,14 +6033,10 @@ sub sidAnalys
    {  $old{$1} = $parent;
    }
    
-   if ($obj =~ m'^(\d+ \d+ obj\s*<<)(.+)(>>\s*stream)'os)
-   {  $del1   = $2;
-      $strPos = length($2) + length($3) + length($1);
-      $del2   = substr($obj, $strPos);
-   }
-   elsif ($obj =~ m'^\d+ \d+ obj\s*<<(.+)>>\s*endobj'os)
+   if ($obj =~ m'^\d+ \d+ obj\s*<<(.+)>>\s*endobj'os)
    {  $del1 = $1;
    }
+   
    if (%links)
    {   my $tSida = $sida + 1;
        if (defined (@{$links{'-1'}}) || (defined @{$links{$tSida}}))
@@ -5548,11 +6062,26 @@ sub sidAnalys
    if (! $taInterAkt)
    {  $del1 =~ s?\s*/AA\s*<<[^>]*>>??os;
    }
+          
+   $del1 =~ s/\b(\d+)\s{1,2}\d+\s{1,2}R\b/xform() . ' 0 R'/oegs;
+   
    if ($del1 !~ m'/Resources'o)
    {  $del1 .= "/Resources $resources";
    }
-       
-   $del1 =~ s/\b(\d+)\s{1,2}\d+\s{1,2}R\b/xform() . ' 0 R'/oegs;
+
+   if (defined $streamObjekt)     # En ny ström ska läggas till
+   {  if ($del1 =~ m'/Contents\s+(\d+)\s{1,2}\d+\s{1,2}R'os)
+      {  my $oldCont = $1;
+         $del1 =~ s|/Contents\s+(\d+)\s{1,2}\d+\s{1,2}R|'/Contents [' . "$oldCont 0 R $streamObjekt" . ']'|oes;
+      }
+      elsif ($del1 =~ m'/Contents\s*\['os)
+      {   $del1 =~ s|/Contents\s*\[([^\]]+)|'/Contents [' . $1 ." $streamObjekt"|oes;
+      }
+      else
+      {   $del1 .= "/Contents $streamObjekt\n";
+      }
+   }
+
    if ($Annots)
    {  $del1 .= $Annots;
    }
@@ -5574,6 +6103,55 @@ sub sidAnalys
    {  ordnaNoder(8); 
    }
 }  
+
+
+sub checkResources
+{   my $pObj  = shift;
+    my $reStr = shift;
+    my $to;
+
+    my $p = index($pObj, '/Resources');
+    if ( $p < 0)
+    {  ;
+    }
+    elsif ($pObj =~ m'/Resources(\s+\d+\s{1,2}\d+\s{1,2}R)'os)
+    {   $reStr = $1;
+        $to = $p + 10 + length($reStr);
+    }
+    else
+    {  my $t = length($pObj);
+       my $i = $p + 10;
+       my $j = $i;
+       my $k = 0;
+       my $c;
+       while ($i < $t)
+       {   $c = substr($pObj,$i,1);
+           if (($c eq '<' )
+           ||  ($c eq '>'))
+           {   if ($c eq '<' )
+               {  $k++;
+               }
+               else
+               {  $k--;
+               }
+               last if ($k == 0);
+           }
+           $i++;
+       }
+       if ($i != $t)
+       {  $i++;
+          $reStr = substr($pObj, $j, ($i - $j));
+          $to = $i;
+       }
+   }
+
+   if (wantarray)
+   {  return ($reStr, $p, $to);
+   }
+   else
+   {  return $reStr;
+   }
+}
 
 
 sub translate
@@ -5933,10 +6511,10 @@ sub errLog
         {  $log .= "Log~Err: No pdf-file has been initiated\n";
         }
         elsif ($pos > 15000000)
-        {  $log .= "Log~Err: Current pdf-file is very big: $pos bytes, will not try to finnish it\n"; 
+        {  $log .= "Log~Err: Current pdf-file is very big: $pos bytes, will not try to finish it\n"; 
         }
         else
-        {  $log .= "Log~Err: Will try to finnish current pdf-file\n";
+        {  $log .= "Log~Err: Will try to finish current pdf-file\n";
            $endMess .= "\n   $utfil";
         }
     }
