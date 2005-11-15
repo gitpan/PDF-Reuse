@@ -15,7 +15,7 @@ use Compress::Zlib qw(compress inflateInit);
 use autouse 'Data::Dumper'   => qw(Dumper);
 use AutoLoader qw(AUTOLOAD);
 
-our $VERSION = '0.32';
+our $VERSION = '0.33';
 our @ISA     = qw(Exporter);
 our @EXPORT  = qw(prFile
                   prPage
@@ -1349,6 +1349,8 @@ To write a program with PDF::Reuse, you need these components:
     <TD title="To add new contents, JavaScript, links and so on..">prInitVars<BR>
         prExtract<BR>
         prForm<BR>
+        prInit<BR>
+        prField<BR>
         prImage<BR>
         prJpeg<BR>
         prFont<BR>
@@ -1374,8 +1376,6 @@ To write a program with PDF::Reuse, you need these components:
      <TD>prDocForm*<BR>
         prGetLogBuffer*<BR>
         prBar*<BR>
-        prInit*<BR>
-        prField*<BR>
         prLog*<BR>
         prTouchUp*<BR>
 	prVers*<BR>
@@ -1664,8 +1664,8 @@ necessary, the others get default values if not given).
                  adjust   => $adjust,        # try to fill the media box
                  effect   => $effect,        # action to be taken
                  tolerant => $tolerant,      # continue even with an invalid form
-                 x        => $x,             # $x pixels from the left
-                 y        => $y,             # $y pixels from the bottom
+                 x        => $x,             # $x points from the left
+                 y        => $y,             # $y points from the bottom
                  rotate   => $degree,        # rotate 
                  size     => $size,          # multiply everything by $size
                  xsize    => $xsize,         # multiply horizontally by $xsize
@@ -1731,6 +1731,36 @@ When you call this function, the necessary objects will be copied to your new
 PDF-file, and you can refer to them with the new name you receive.
 
 
+=head2 prField		- assign a value to an interactive field 
+
+	prField ( $fieldName, $value )
+
+B<$fieldName> is an interactive field in the document you are creating.
+It has to be spelled exactly the same way here as it spelled in the document.
+B<$value> is what you want to assigned to the field.
+Put all your sentences with prField early in your script. After prFile and B<before>
+prDoc or prDocForm and of course before prEnd. Each sentence with prField is 
+translated to JavaScript and merged with old JavaScript  
+
+See prDocForm() for an example
+
+If you are going to assign a value to a field consisting of several lines, you
+can write like this:
+
+   my $string = "This is the first line \r second line \n 3:rd line";
+   prField('fieldName', $string);
+
+You can also let '$value' be a  snippet of JavaScript-code that assigns something
+to the field. Then you have to put 'js:' first in "$value" like this:
+
+   my $sentence = encrypt('This will be decrypted by "unPack"(JavaScript) ');
+   prField('Interest_9', "js: unPack('$sentence')");
+
+If you refer to a JavaScript function, it has to be included with prJs first. (The
+JavaScript interpreter will simply not be aware of old functions in the PDF-document,
+when the initiation is done.)
+
+
 =head2 prFont		- set current font 
 
    prFont ( $fontName )
@@ -1786,7 +1816,7 @@ one complicated with a possibility to detail control.
    prFontSize ( $size )
 
 Returns B<$actualSize, $fontSizeBeforetheChange>. Without parameters
-prFontSize() sets the size to 12 pixels, which is default. 
+prFontSize() sets the size to 12 points, which is default. 
 
 =head2 prForm		- use a page from an old document as a form/background 
 
@@ -1798,8 +1828,8 @@ necessary, the others get default values if not given).
               adjust   => $adjust,        # try to fill the media box
               effect   => $effect,        # action to be taken
               tolerant => $tolerant,      # continue even with an invalid form
-              x        => $x,             # $x pixels from the left
-              y        => $y,             # $y pixels from the bottom
+              x        => $x,             # $x points from the left
+              y        => $y,             # $y points from the bottom
               rotate   => $degree,        # rotate 
               size     => $size,          # multiply everything by $size
               xsize    => $xsize,         # multiply horizontally by $xsize
@@ -1917,8 +1947,8 @@ might loose fonts or something else. An other alternative could be to use prSing
    # More text ..
 
    #################################################################
-   # We want to put a miniature of EUSA.pdf, 35 pixels from the left
-   # 85 pixels up, and in the format 250 X 200 pixels
+   # We want to put a miniature of EUSA.pdf, 35 points from the left
+   # 85 points up, and in the format 250 X 200 points
    #################################################################
 
    my $xScale = 250 / ($vec[3] - $vec[1]);
@@ -2007,8 +2037,8 @@ necessary, the others get default values if not given).
               imageNo  => $imageNo        # image number
               adjust   => $adjust,        # try to fill the media box
               effect   => $effect,        # action to be taken
-              x        => $x,             # $x pixels from the left
-              y        => $y,             # $y pixels from the bottom
+              x        => $x,             # $x points from the left
+              y        => $y,             # $y points from the bottom
               rotate   => $degree,        # rotate 
               size     => $size,          # multiply everything by $size
               xsize    => $xsize,         # multiply horizontally by $xsize
@@ -2052,7 +2082,7 @@ For all other parameters, look at prForm().
    prPage();
    ########################################################
    #  Now we make both images so that they could fit into
-   #  a box 300 X 300 pixels, and they are displayed
+   #  a box 300 X 300 points, and they are displayed
    ########################################################
 
    prText(25, 800, 'This is the first image :');
@@ -2095,6 +2125,34 @@ page, the two images are scaled and shown.
 
 In the distribution there is an utility program, 'reuseComponent_pl', which displays
 included images in a PDF-file and their "names".
+
+=head2 prInit		- add JavaScript to be executed at initiation 
+
+   prInit ( $string, $duplicateCode )
+
+B<$string> can be any JavaScript code, but you can only refer to functions included
+with prJs. The JavaScript interpreter will not know other functions in the document.
+Often you can add new things, but you can't remove or change interactive fields,
+because the interpreter hasn't come that far, when initiation is done.
+
+B<$duplicateCode> is undefined or anything. It duplicates the JavaScript code
+which has been used at initiation, so you can look at it from within Acrobat and
+debug it. It makes the document bigger. This parameter is B<deprecated>.
+
+   use PDF::Reuse;
+   use strict;
+   
+   prFile('myFile.pdf');
+   prInit('app.alert("This is displayed when opening the document");');
+      
+   prEnd();
+
+
+Remark: Avoid to use "return" in the code you use at initiation. If your user has
+downloaded a page with Web Capture, and after that opens a PDF-document where a 
+JavaScript is run at initiation and that JavaScript contains a return-statement,
+a bug occurs. The JavaScript interpreter "exits" instead of returning, the execution
+of the JavaScript might finish to early. This is a bug in Acrobat/Reader 5.
 
 
 =head2 prInitVars		- initiate global variables and internal tables 
@@ -2165,7 +2223,6 @@ JavaScript functions: function a (..){ ... } function b (..) { ...} and so on
 If B<$string> doesn't contain '{', B<$string> is interpreted as a filename.
 In that case the file has to consist only of JavaScript functions.
 
-  
 B<See "Remarks about JavaScript">
 
 =head2 prLink    - add a hyper link
@@ -2265,7 +2322,7 @@ directory 'C:\run'. If that directory doesn't exist, the system tries to create 
 
    prMbox ( $lowerLeftX, $lowerLeftY, $upperRightX, $upperRightY )
 
-If the function or the parameters are missing, they are set to 0, 0, 595, 842 pixels respectively.   
+If the function or the parameters are missing, they are set to 0, 0, 595, 842 points respectively.   
 Only for new pages. Pages created with prDoc and prSinglePage keep their media boxes unchanged.
 
 See prForm() for an example.
@@ -2339,7 +2396,7 @@ followed by prPage instead.
 
    prStrWidth($string, $font, $fontSize)
 
-Returns string width in pixels.
+Returns string width in points.
 Should be used in conjunction with one of these predefined fonts of Acrobat/Reader:
 Times-Roman, Times-Bold, Times-Italic, Times-BoldItalic, Courier, Courier-Bold, Courier-Oblique,
 Courier-BoldOblique, Helvetica, Helvetica-Bold, Helvetica-Oblique,
@@ -2384,7 +2441,7 @@ many other things could also influence the text.)
    prText( 200, 735, 'This is a longer sentence', 'right');
    prText( 200, 720, 'A word', 'right');
 
-   prText( 200, 705, 'Centered around a point 200 pixels from the left', 'center');
+   prText( 200, 705, 'Centered around a point 200 points from the left', 'center');
    prText( 200, 690, 'The same center', 'center');
    prText( 200, 675, '->.<-', 'center');
 
@@ -2424,7 +2481,7 @@ many other things could also influence the text.)
 
 Prints a bar font pattern at the current page.
 Returns $internalName for the font.
-$x and $y are coordinates in pixels and $string should consist of the characters
+$x and $y are coordinates in points and $string should consist of the characters
 '0', '1' and '2' (or 'G'). '0' is a white bar, '1' is a dark bar. '2' and 'G' are
 dark, slightly longer bars, guard bars. 
 You can use e.g. GD::Barcode or one module in that group to calculate the bar code
@@ -2459,36 +2516,6 @@ See "Restoring a document from the log" in the tutorial for more about the
 time stamp
 
 
-=item prField		- assign a value to an interactive field 
-
-	prField ( $fieldName, $value )
-
-B<$fieldName> is an interactive field in the document you are creating.
-It has to be spelled exactly the same way here as it spelled in the document.
-B<$value> is what you want to assigned to the field.
-Put all your sentences with prField early in your script. After prFile and B<before>
-prDoc or prDocForm and of course before prEnd. Each sentence with prField is 
-translated to JavaScript and merged with old JavaScript  
-
-See prDocForm() for an example
-
-If you are going to assign a value to a field consisting of several lines, you
-can write like this:
-
-   my $string = "This is the first line \r second line \n 3:rd line";
-   prField('fieldName', $string);
-
-You can also let '$value' be a  snippet of JavaScript-code that assigns something
-to the field. Then you have to put 'js:' first in "$value" like this:
-
-   my $sentence = encrypt('This will be decrypted by "unPack"(JavaScript) ');
-   prField('Interest_9', "js: unPack('$sentence')");
-
-If you refer to a JavaScript function, it has to be included with prJs first. (The
-JavaScript interpreter will simply not be aware of old functions in the PDF-document,
-when the initiation is done.)
-
-This function needs to be rewritten fot Acrobat 7
 
 =item prId		- define id-string of a PDF document 
 
@@ -2506,37 +2533,6 @@ An internal function. Avoid using it. B<$string> could be "Rep" for replace or
 
 Normally you don't use this function. Then an id is calculated with the help of
 Digest::MD5::md5_hex and some data from the run.
-
-=item prInit		- add JavaScript to be executed at initiation 
-
-   prInit ( $string, $duplicateCode )
-
-B<$string> can be any JavaScript code, but you can only refer to functions included
-with prJs. The JavaScript interpreter will not know other functions in the document.
-Often you can add new things, but you can't remove or change interactive fields,
-because the interpreter hasn't come that far, when initiation is done.
-
-B<$duplicateCode> is undefined or anything. It duplicates the JavaScript code
-which has been used at initiation, so you can look at it from within Acrobat and
-debug it. It makes the document bigger. This parameter is B<deprecated>.
-
-   use PDF::Reuse;
-   use strict;
-
-   prFile('myFile.pdf');
-   prJs('customerResponse.js');
-   prInit('nameAddress(0, 100, 700);');
-   prEnd();
-
-
-
-This function has to be rewritten for Acrobat 7.
-
-Remark: Avoid to use "return" in the code you use at initiation. If your user has
-downloaded a page with Web Capture, and after that opens a PDF-document where a 
-JavaScript is run at initiation and that JavaScript contains a return-statement,
-a bug occurs. The JavaScript interpreter "exits" instead of returning, the execution
-of the JavaScript might finish to early. This is a bug in Acrobat/Reader 5.
 
 
 =item prTouchUp		- make changes and reuse more difficult 
@@ -2577,7 +2573,6 @@ restored.
 
    PDF::Reuse::Tutorial
    PDF::Reuse::Barcode
-   PDF::Reuse::Scramble
    PDF::Reuse::OverlayChart
 
 To program with PDF-operators, look at "The PDF-reference Manual" which probably
@@ -2652,6 +2647,10 @@ reports.
 
 The functionality of prDoc and prSinglePage to include new contents was developed for a
 specific task with support from the Electoral Enrolment Centre, Wellington, New Zealand
+
+=head1 MAILING LIST
+
+   http://groups.google.com/group/PDF-Reuse
 
 =head1 AUTHOR
 
@@ -6391,12 +6390,12 @@ sub skrivKedja
    for (values %initScript)
    {   $code .= $_ . "\n";
    }
-   $code .= "function Init()\r{\r";
-   $code .= 'if (typeof this.info.ModDate == "object")' . "\r{ return true; }\r"; 
+   $code .= "function Init() { ";
+   $code .= 'if (typeof this.info.ModDate == "object")' . " { return true; }"; 
    for (@inits)
    {  $code .= $_ . "\n";
    }
-   $code .= "}\r Init(); ";
+   $code .= "} Init(); ";
 
    my $spar = skrivJS($code);
    undef @inits;
@@ -6459,20 +6458,20 @@ sub inkludera
 
 
 sub defLadda
-{  my $code = "function Ladda()\r{\r";
+{  my $code = "function Ladda() {";
    for (keys %fields)
    {  my $val = $fields{$_};
       if ($val =~ m'\s*js\s*\:(.+)'oi) 
       {   $val = $1;
-          $code .= "if (this.getField('$_')) this.getField('$_').value = $val;\r";
+          $code .= "if (this.getField('$_')) this.getField('$_').value = $val; ";
       }
       else
       {  $val =~ s/([^A-Za-z0-9\-_.!* ])/sprintf("%%%02X", ord($1))/ge;
-         $code .= "if (this.getField('$_')) this.getField('$_').value = unescape('$val');\r";
+         $code .= "if (this.getField('$_')) this.getField('$_').value = unescape('$val'); ";
       }
 
    }  
-   $code .= " 1;}\r";
+   $code .= " 1;} ";
    
    
    $initScript{'Ladda'} = $code;
@@ -6486,8 +6485,8 @@ sub defLadda
 }
 
 sub defInit
-{  my $code = "function Init()\r{\r";
-   $code .= 'if (typeof this.info.ModDate == "object")' . "\r{ return true; }\r"; 
+{  my $code = "function Init() { ";
+   $code .= 'if (typeof this.info.ModDate == "object")' . " { return true; } "; 
    for (@inits)
    {  $code .= $_ . "\n";
    }

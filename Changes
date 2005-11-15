@@ -1,5 +1,9 @@
 Revision history for Perl extension PDF::Reuse.
 
+0.33 Tue Nov 15 2005
+     Corrected a "bug" with prField. Changed the documentation a little.
+     The address to the mailing list is given. 
+
 0.32 Fri Jul 22 2005
      prText has 1 more parameter, rotation, parameter 4 now only handles alignment.
      prDoc has new functionality. If there are "contents" available, it is added to

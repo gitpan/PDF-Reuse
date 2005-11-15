@@ -332,3 +332,4 @@ sub blackText
 {   PDF::Reuse::prAdd("0 0 0 rg\n0 g\nf\n");
     1;
 }
+
