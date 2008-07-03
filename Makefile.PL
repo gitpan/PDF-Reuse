@@ -10,7 +10,9 @@ WriteMakefile(
                           Carp           => 0,
                           Exporter       => 0,
                           AutoLoader     => 0,
-                          Data::Dumper   => 0},
+                          Data::Dumper   => 0,
+                          Text::PDF::TTFont0 => 0,
+                          Font::TTF   => 0},
     ($] >= 5.005 ?    ## Add these new keywords supported since 5.005
       (ABSTRACT_FROM => 'Reuse.pm', 
        AUTHOR     => 'Lars Lundberg LARSLUND@CPAN.ORG') : ()),

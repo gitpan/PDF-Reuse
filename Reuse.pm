@@ -15,7 +15,7 @@ use Compress::Zlib qw(compress inflateInit);
 use autouse 'Data::Dumper'   => qw(Dumper);
 use AutoLoader qw(AUTOLOAD);
 
-our $VERSION = '0.33';
+our $VERSION = '0.35';
 our @ISA     = qw(Exporter);
 our @EXPORT  = qw(prFile
                   prPage
@@ -50,13 +50,14 @@ our @EXPORT  = qw(prFile
                   prBookmark
                   prStrWidth
                   prLink
+                  prTTFont
                   prSinglePage);
 
 our ($utfil, $slutNod, $formCont, $imSeq, $duplicateInits, $page, $sidObjNr, $sida,
     $interActive, $NamesSaved, $AARootSaved, $AAPageSaved, $root,
     $AcroFormSaved, $id, $ldir, $checkId, $formNr, $imageNr, 
     $filnamn, $interAktivSida, $taInterAkt, $type, $runfil, $checkCs,
-    $confuseObj, $compress, $pos, $fontNr, $objNr,
+    $confuseObj, $compress, $pos, $fontNr, $objNr, $docProxy,
     $defGState, $gSNr, $pattern, $shading, $colorSpace, $totalCount);
  
 our (@kids, @counts, @formBox, @objekt, @parents, @aktuellFont, @skapa,
@@ -134,6 +135,7 @@ use constant   foEXTNAMN    => 2;
 use constant   foORIGINALNR => 3;
 use constant   foSOURCE     => 4;
 use constant   foTYP        => 5;
+use constant   foFONTOBJ    => 6;
 
 ##########
 # Övrigt
@@ -446,6 +448,8 @@ sub prText
   }
   my $Font        = $aktuellFont[foINTNAMN];        # Namn i strömmen
   $sidFont{$Font} = $aktuellFont[foREFOBJ];
+  my $fontname    = $aktuellFont[foEXTNAMN];
+  my $ttfont      = $font{$fontname} ? $font{$fontname}[foFONTOBJ] : undef;
   
   
   # define what the offset for alignment is 
@@ -467,7 +471,11 @@ sub prText
   
   unless($rot)
   {  $stream .= "\nBT /$Font $fontSize Tf ";
-     unless ($aktuellFont[foTYP])
+     if($ttfont)
+     {   $TxT = $ttfont->encode_text($TxT);
+         $stream .= $xPos+$x_align_offset . " $yPos Td $TxT Tj ET\n";
+     }
+     elsif (!$aktuellFont[foTYP])
      {   $stream .= $xPos+$x_align_offset . " $yPos Td \($TxT\) Tj ET\n";
      }
      else
@@ -497,11 +505,12 @@ sub prText
      my $Sin    = sprintf("%.6f", sin($radian));
      my $negSin = $Sin * -1;
   
+     my $encText = $ttfont ? $ttfont->encode_text($TxT) : "\($TxT\)";
      $stream .=   "\nq\n"		                    # enter a new stack frame
                 # . "/Gs0 gs\n"	                            # reset graphic mode
                 . "$Cos $Sin $negSin $Cos $xPos $yPos cm\n" # rotation/translation in the CM
                 . "\nBT /$Font $fontSize Tf " 
-                . "$x_align_offset 0 Td \($TxT\) Tj ET\n"   # text @ 0,0
+                . "$x_align_offset 0 Td $encText Tj ET\n"   # text @ 0,0
                 . "Q\n";                                    # close the stack frame
   }
   if (! $pos)
@@ -1006,7 +1015,12 @@ sub prEnd
     if ($stream)
     { skrivSida(); }
     skrivUtNoder();
-   
+
+    if($docProxy)
+    {  $docProxy->write_objects;
+       undef $docProxy;             # Break circular refs
+    }
+
     ###################
     # Skriv root 
     ###################
@@ -1036,7 +1050,7 @@ sub prEnd
    
     if (scalar @bookmarks)
     {  my $outLine = ordnaBookmarks();
-       $utrad .= "/Outlines $outLine 0 R\n";
+       $utrad .= "/Outlines $outLine 0 R/PageMode /UseOutlines\n";
     }
     if (scalar %prefs)
     {   $utrad .= '/ViewerPreferences << ';
@@ -1237,6 +1251,270 @@ sub definieraId
       return ($str, $str);
    }     
 }
+
+sub prStrWidth 
+{  require PDF::Reuse::Util;
+   my $string   = shift;
+   my $Font     = shift;
+   my $FontSize = shift || $fontSize;
+   my $w = 0;
+
+   if(my($width) = ttfStrWidth($string, $Font, $FontSize))
+   {  return $width;
+   }
+    
+   if (! $Font)
+   {  if (! $aktuellFont[foEXTNAMN])
+      {  findFont();
+      }
+      $Font = $aktuellFont[foEXTNAMN];
+   }
+
+   if (! exists $PDF::Reuse::Util::font_widths{$Font})
+   {  if (exists $stdFont{$Font})
+      {  $Font = $stdFont{$Font};
+      }
+      if (! exists $PDF::Reuse::Util::font_widths{$Font})
+      {   $Font = 'Helvetica';
+      }
+   }
+  
+   if (ref($PDF::Reuse::Util::font_widths{$Font}) eq 'ARRAY')
+   {   my @font_table = @{ $PDF::Reuse::Util::font_widths{$Font} };
+       for (unpack ("C*", $string)) 
+       {  $w += $font_table[$_];	
+       }
+   }
+   else
+   {   $w = length($string) * $PDF::Reuse::Util::font_widths{$Font};
+   }
+   $w = $w / 1000 * $FontSize;
+  
+   return $w;
+}
+
+sub prTTFont
+{  return prFont() if ! @_;
+   my($selector, $fontname) = @_;
+
+   # Have we loaded this font already?
+   my $ttfont = findTTFont($selector);
+   if (! $ttfont  and  $font{$selector} )
+   {  return prFont($selector);
+   }
+   $fontname = $ttfont->fontname if $ttfont;
+
+   # Create a new TTFont object if we haven't loaded this one before
+   if (! $ttfont)
+   {  $docProxy ||= PDF::Reuse::DocProxy->new(
+         next_obj => sub { ++$objNr },
+         prObj    => \&prObj,
+      );
+
+      my $ttfont = PDF::Reuse::TTFont->new(
+         filename => $selector,
+         fontname => $fontname,
+         fontAbbr => 'Ft' . ++$fontNr,
+         docProxy => $docProxy,
+      );
+      $fontname = $ttfont->fontname;
+
+      $font{$fontname}[foINTNAMN]      = $ttfont->fontAbbr; 
+      $font{$fontname}[foREFOBJ]       = $ttfont->obj_num;
+      $font{$fontname}[foFONTOBJ]      = $ttfont;
+      $objRef{$ttfont->fontAbbr}       = $ttfont->obj_num;
+      $fontSource{$fontname}[foSOURCE] = 'Standard';
+   }
+
+   my $oldIntNamn = $aktuellFont[foINTNAMN];
+   my $oldExtNamn = $aktuellFont[foEXTNAMN]; 
+
+   $aktuellFont[foEXTNAMN]   = $fontname;
+   $aktuellFont[foREFOBJ]    = $font{$fontname}[foREFOBJ];
+   $aktuellFont[foINTNAMN]   = $font{$fontname}[foINTNAMN];
+   $aktuellFont[foTYP]       = $font{$fontname}[foTYP];
+
+   $sidFont{$aktuellFont[foINTNAMN]} = $aktuellFont[foREFOBJ];
+
+   if (wantarray)
+   { return ($aktuellFont[foINTNAMN], $aktuellFont[foEXTNAMN], $oldIntNamn, $oldExtNamn, \%font);
+   }
+   else
+   { return $aktuellFont[foINTNAMN];
+   }
+}
+
+
+sub prObj
+{  my($objNr, $data) = @_;
+
+   $objekt[$objNr] = $pos;
+   $pos += syswrite UTFIL, $data;
+}
+
+
+sub findTTFont
+{  my $selector = shift || $aktuellFont[foEXTNAMN];
+
+   return $font{$selector}[foFONTOBJ] if $font{$selector};
+   foreach my $name (keys %font)
+   {  if (  $font{$name}[foINTNAMN] eq $selector 
+         or $font{$name}[foFONTOBJ] && $font{$name}[foFONTOBJ]->filename eq $selector
+      ) 
+      {  return $font{$name}[foFONTOBJ];
+      }
+   }
+   return;
+}
+
+
+sub ttfStrWidth
+{  my($string, $selector, $fontsize) = @_;
+
+   my $ttfont = findTTFont($selector) or return;
+   return $ttfont->text_width($string, $fontsize);
+}
+
+
+# This 'glue' package emulates the bits of the Text::PDF::File API that are
+# needed by Text::PDF::TTFont0 (below) and ties them in to the PDF::Reuse API.
+
+package PDF::Reuse::DocProxy;
+
+sub new
+{  my $class = shift;
+
+   my $self = bless { ' version' => 3, @_, '>buffer'  => '', }, $class;
+}
+
+
+sub new_obj
+{  my $self = shift;
+   my $obj  = shift  or die 'No base for new_obj';
+
+   my $num = $self->{next_obj}->();
+   my $gen = 0;
+
+   $self->{' objcache'}{$num, $gen} = $obj;
+   $self->{' objects'}{$obj->uid}   = [ $num, $gen ];
+   return $obj;
+}
+
+
+sub object_number
+{  my($self, $obj) = @_;
+   my $num = $self->{' objects'}{$obj->uid} || return;
+   return $num->[0];
+}
+
+
+sub print
+{  my($self, $data) = @_;
+
+   if(my($tail, $rest) = $data =~ m{\A(.*?\nendobj\n)(.*)\z}s)
+   {  my($obj_num) = $self->{'>buffer'} =~ /(\d+)/;
+      # Pass serialised object back to PDF::Reuse
+      $self->{prObj}->($obj_num, $self->{'>buffer'} . $tail);
+      $self->{'>buffer'} = $rest;
+   }
+   else
+   {  $self->{'>buffer'} .= $data;
+   }
+}
+
+
+sub printf
+{  my($self, $format, @args) = @_;;
+   $self->print(sprintf($format, @args));
+}
+
+
+sub out_obj
+{  my($self, $obj) = @_;
+   return $self->new_obj($obj) unless defined $self->{' objects'}{$obj->uid};
+   push @{ $self->{'>todo'} }, $obj->uid;
+}
+
+
+sub tell
+{  return length shift->{'>buffer'};
+}
+
+
+sub write_objects
+{  my($self) = @_;
+
+   $self->{'>done'} = {};
+   $self->{'>todo'} = [ sort map { $_->uid } values %{ $self->{' objcache'} } ];
+   while(my $id = shift @{ $self->{'>todo'} }) {
+      next if $self->{'>done'}{$id};
+      my($num, $gen) = @{ $self->{' objects'}{$id} };
+      $self->printf("%d %d obj\n", $num, $gen);
+      $self->{' objcache'}{$num, $gen}->outobjdeep($self, $self);
+      $self->print("\nendobj\n");
+      $self->{'>done'}{$id}++;
+   }
+}
+
+
+# This is a wrapper around Text::PDF::TTFont0, which provides support for
+# embedding TrueType fonts
+
+package PDF::Reuse::TTFont;
+
+sub new
+{  my $class = shift;
+
+   require Text::PDF::TTFont0;
+
+   my $self = bless { 'subset'   => 1, @_, }, $class;
+
+   $self->{ttfont} = Text::PDF::TTFont0->new(
+      $self->{docProxy}, 
+      $self->{filename},
+      $self->{fontAbbr},
+      -subset => $self->{subset},
+   );
+   $self->{ttfont}->{' subvec'} = '';
+
+   $self->{obj_num} = $self->{docProxy}->object_number($self->{ttfont});
+
+   $self->{fontname} ||= $self->find_name();
+
+   return $self;
+}
+
+sub filename  { return $_[0]->{filename};     }
+sub fontname  { return $_[0]->{fontname};     }
+sub obj_num   { return $_[0]->{obj_num};      }
+sub fontAbbr  { return $_[0]->{fontAbbr};     }
+sub docProxy  { return $_[0]->{docProxy};     }
+
+sub find_name
+{  my $self = shift;
+   my($filebase) = $self->filename =~ m{.*[\\/](.*)\.};
+   my $font = $self->{ttfont}->{' font'} or return $filebase;
+   my $obj  = $font->{'name'}            or return $filebase;
+   my $name = $obj->read->find_name(4)   or return $filebase;
+   $name =~ s{\W}{}g;
+   return $name;
+}
+
+sub encode_text
+{  my($self, $text) = @_;
+   $text =~ s|\\\(|(|gos;
+   $text =~ s|\\\)|)|gos;
+   return $self->{ttfont}->out_text($text);
+}
+
+sub text_width
+{  my($self, $text, $size) = @_;
+   return $self->{ttfont}->width($text) * $size;
+}
+
+
+package PDF::Reuse;  # Applies to the autoloaded methods below (?)
+
 1;
 
 __END__
@@ -1265,7 +1543,7 @@ per second and very big PDF documents if necessary.
 
 The module produces PDF-1.4 files. Some features of PDF-1.5, like "object streams"
 and "cross reference streams", are supported, but only at an experimental level. More
-testing is needed. (If you get problems with a new document from Acrobat 6 or 7, try to 
+testing is needed. (If you get problems with a new document from Acrobat 6 or higher, try to 
 save it or recreate it as a PDF-1.4 document first, before using it together with 
 this module.) 
 
@@ -1332,6 +1610,13 @@ The module doesn't make any attempt to import anything from encrypted files.
 To write a program with PDF::Reuse, you need these components:
 
 =begin html
+<style>
+ pre span.comment {
+  color:AA0000 ;
+  font-style: italic;
+}
+</style>
+
 
 <TABLE  border=1 cellpadding="7">
   <THEAD bgcolor="lightblue">
@@ -1355,6 +1640,7 @@ To write a program with PDF::Reuse, you need these components:
         prJpeg<BR>
         prFont<BR>
         prFontSize<BR>
+        prTTFont<BR>
         prGraphState<BR>
         prAdd<BR>
         prText<BR>
@@ -1480,7 +1766,7 @@ This function is intended to give you detail control at a low level.
 
    prBookmark($reference)
 
-Defines a "bookmark". $reference refers to a hash or array of hashes which look
+Defines a "bookmark". $reference refers to a hash or array of hashes which looks
 something like this:
  
           {  text  => 'Document',
@@ -2400,8 +2686,8 @@ Returns string width in points.
 Should be used in conjunction with one of these predefined fonts of Acrobat/Reader:
 Times-Roman, Times-Bold, Times-Italic, Times-BoldItalic, Courier, Courier-Bold, Courier-Oblique,
 Courier-BoldOblique, Helvetica, Helvetica-Bold, Helvetica-Oblique,
-Helvetica-BoldOblique. If some other font is given, Helvetica is used, and the
-returned value will at the best be approximate.
+Helvetica-BoldOblique or with a TrueType font embedded with prTTFont. If some other font is
+given, Helvetica is used, and the returned value will at the best be approximate.
 
 =head2 prText		- add a text-string 
 
@@ -2410,8 +2696,8 @@ returned value will at the best be approximate.
 Puts B<$string> at position B<$x, $y>
 Returns 1 in scalar context. Returns ($xFrom, $xTo) in list context. $xTo will not
 be defined together with a rotation. prStrWidth() is used to calculate the length of the
-strings, so only the predefined fonts together with Acrobat/Reader will give
-reliable values for $xTo.      
+strings, so only the predefined fonts together with Acrobat/Reader, or embedded TrueType
+fonts will give reliable values for $xTo.      
 
 $align can be 'left' (= default), 'center' or 'right'. The parameter is optional.
 
@@ -2469,6 +2755,44 @@ many other things could also influence the text.)
    prText( 200, 230, 'Rotate 270 degrees clock-wise ra->','right', 'q3');
    
    prEnd();
+
+=head2 prTTFont         - select and embed a TrueType font
+
+  prTTFont ( "/path/to/font/file.ttf" )
+
+This function is equivalent to C<prFont> except that rather than restricting
+you to the list of core built-in fonts, it allows you to select an external
+TrueType font file and have it embedded in your PDF document.  Using TrueType
+fonts also enables the C<prText> function to accept UTF-8 strings, which allows
+you to use characters outside the Mac-Roman/Win-ANSI character sets used by the
+built-in fonts.
+
+You can specify the same font path multiple times in one document and only one
+copy will be embedded.  Alternatively, C<prTTFont> returns an identifier which
+can be used to select the same font again:
+
+  my $arial = prTTFont('/path/to/Arial.ttf');
+  prFontSize(20);
+  prText(20, 700, 'Some text in Arial');
+  #
+  # ... later ...
+  #
+  prPage();
+  prTTFont($arial);
+  prFontSize(12);
+  prText(20, 700, 'Some more text in Arial');
+  #
+  #  to pass a UTF8 string to prText
+  # 
+  prText(20, 675, "T\x{113}n\x{101} koutou");  # T?n? Koutou 
+
+In list context this function returns C<$internalName>, C<$externalName>,
+C<$oldInternalName>, C<$oldExternalname>. The first two variables refer to the
+current font, the last two refer to the font before the change. In scalar
+context only C<$internalName> is returned.
+
+Note: To use this function, you must have the L<Font::TTF> and L<Text::PDF>
+modules installed.
 
 
 =head1 INTERNAL OR DEPRECATED FUNCTIONS
@@ -2608,42 +2932,14 @@ implemented in this module.
 Many things can be added afterwards, after creating the files. If you e.g. need
 files to be encrypted, you can use a standard batch routine within Adobe Acrobat.   
 
-=head1 TODO
-
-I have been experimenting a little with a helper application for Netscape or
-Internet Explorer and it is quite obvious that you could get very good performance
-and high reliability if you transferred the logs and constructed the documents at
-the target computer, instead of the transferring formatted documents.
-The reasons are:
-
-The size of a log is usually only a fraction of the formatted document. The logs
-keep a time stamp for all source files, so you could have a simple cashing. It is
-possible to put a time stamp on the log file and then you get a hierarchal structure.
-When the system reads a log file it could quickly find out which source files are
-missing. If it encounters the URL and time stamp of cashed log file, that would be
-sufficient.  It would not be necessary to get it over the net.
-You would minimize the number of conversations and you would also increase the
-possibilities to complete a task even if the connections are bad.    
-
-The cash could function as a secondary library for forms and JavaScripts.
-When you work with HTML you are usually interested in the most recent version of
-of a component. With PDF the emphasis is usually more on exactness, and PDF-documents
-tend to be more stable. This strengthens the motive for a functioning cash.
-
-(Also I think you could skip some holy rules from HTML-processing. E.g. if an 
-international body has forms and JavaScripts for booking a hotel room, any 
-affiliated hotel should have the right to use the common files, so they could be
-used via the cash regardless of if you are booking a room in Agadir or Shanghai.
-That would create libraries and rational reuse of code. I think security and
-legal problems would be possible to handle.)
-
-At the present time PDF cannot compete with HTML, but if you used the log files
-and a simple cash, PDF would be just superior for repeated tasks.
-
 =head1 THANKS TO
 
-Martin Langhoff, Matisse Enzer and others who have contributed with code, suggestions and error
+Martin Langhoff, Matisse Enzer, Yunliang Yu and others who have contributed with code, suggestions and error
 reports.
+
+Grant McLean has implemented font embedding by grafting Font::TTF and
+Text::PDF::TTFont0 onto the PDF::Reuse API. He has written the embedded packages PDF::Reuse::DocProxy
+and PDF::Reuse::TTFont.
 
 The functionality of prDoc and prSinglePage to include new contents was developed for a
 specific task with support from the Electoral Enrolment Centre, Wellington, New Zealand
@@ -2659,8 +2955,8 @@ Lars Lundberg larslund@cpan.org
 =head1 COPYRIGHT 
 
 Copyright (C) 2003 - 2004 Lars Lundberg, Solidez HB.
-
-Copyright (C) 2005 Karin Lundberg. All rights reserved.
+Copyright (C) 2005 Karin Lundberg.
+Copyright (C) 2006 - Lars Lundberg, Solidez HB.
 This program is free software; you can redistribute it and/or
 modify it under the same terms as Perl itself.
 
@@ -2809,43 +3105,6 @@ sub mergeLinks
     return $objNr;
 }
 
-sub prStrWidth 
-{  require PDF::Reuse::Util;
-   my $string   = shift;
-   my $Font     = shift;
-   my $FontSize = shift || $fontSize;
-   my $w = 0;
-    
-  if (! $Font)
-  {   if (! $aktuellFont[foEXTNAMN])
-      {  findFont();
-      }
-      $Font = $aktuellFont[foEXTNAMN];
-  }
-
-  if (! exists $PDF::Reuse::Util::font_widths{$Font})
-  {  if (exists $stdFont{$Font})
-     {  $Font = $stdFont{$Font};
-     }
-     if (! exists $PDF::Reuse::Util::font_widths{$Font})
-     {   $Font = 'Helvetica';
-     }
-  }
-  
-  if (ref($PDF::Reuse::Util::font_widths{$Font}) eq 'ARRAY')
-  {   my @font_table = @{ $PDF::Reuse::Util::font_widths{$Font} };
-      for (unpack ("C*", $string)) 
-      {  $w += $font_table[$_];	
-      }
-  }
-  else
-  {   $w = length($string) * $PDF::Reuse::Util::font_widths{$Font};
-  }
-  $w = $w / 1000 * $FontSize;
-  
-  return $w;
-}
-
 
 sub prBookmark
 {   my $param = shift;
@@ -2974,7 +3233,8 @@ sub descend
      if (exists $entry{'act'})
      {   my $code = $entry{'act'};
          if ($code =~ m/^\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*$/os)
-         {  $code = "this.pageNum = $1; this.scroll($2, $3);";
+         {  # $code = "this.pageNum = $1; this.scroll($2, $3);";
+              $code = "this.pageNum = $1;".($3?" this.scroll($2, $3);":"");
          }
          $jsObj = skrivJS($code);         
      } 
@@ -5668,7 +5928,7 @@ sub analysera
    else
    { errLog("Didn't find pages "); }
 
-   my @levels;
+   my @levels; my %kids;
    my $li = -1;
 
    if ($objektet =~ m'/Kids\s*\[([^\]]+)'os)
@@ -5689,10 +5949,12 @@ sub analysera
              $vektor = $1; 
              my @sObj; 
              while ($vektor =~ m'(\d+)\s{1,2}\d+\s{1,2}R'go)
-             {   push @sObj, $1;       
+             {   push @sObj, $1 if !$kids{$1}; $kids{$1}=1;       
              }
-             $li++;
-             $levels[$li] = \@sObj;
+               if(@sObj)
+               {  $li++;
+                  $levels[$li] = \@sObj;
+               }
           }
           else
           {  $sidAcc++;

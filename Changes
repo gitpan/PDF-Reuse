@@ -1,5 +1,15 @@
 Revision history for Perl extension PDF::Reuse.
 
+0.35 Mon Jul 3 2008
+     Thanks to Yunliang Yu Outlines mode is turned on, if bookmarks are added
+     and a minor bug with bookmarks and onother one with the creation of pages
+     are corrected.
+
+0.34 June 2008
+     Thanks to Grant McLean prTTFont method is added to support embedding
+     TrueType fonts and using UTF8 text with prText (only works if Font::TTF and
+     Text::PDF are installed)
+
 0.33 Tue Nov 15 2005
      Corrected a "bug" with prField. Changed the documentation a little.
      The address to the mailing list is given. 
