@@ -15,7 +15,7 @@ use Compress::Zlib qw(compress inflateInit);
 use autouse 'Data::Dumper'   => qw(Dumper);
 use AutoLoader qw(AUTOLOAD);
 
-our $VERSION = '0.35_03';
+our $VERSION = '0.35_02';
 our @ISA     = qw(Exporter);
 our @EXPORT  = qw(prFile
                   prPage
@@ -2214,7 +2214,7 @@ Select a line of text somewhere. Right-click the mouse. Choose "Attributes".
 Change font size or anything else, and then you change it back to the old value.
 Save the document. You could alternatively save the file as Postscript and redistill
 it with the distiller or with Ghost script, but this is a little more risky. You
-might loose fonts or something else. An other alternative could be to use prSinglePage().
+might loose fonts or something else. Another alternative could be to use prSinglePage().
 
 
    use PDF::Reuse;
