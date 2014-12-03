@@ -1,6 +1,6 @@
 Revision history for Perl extension PDF::Reuse.
 
-0.35_01 Tue Dec 2 2014 - DEV RELEASE
+0.35_03 Tue Dec 2 2014 - DEV RELEASE
      Added binary blob handling to prJpeg.
      Added prAltJpeg to allow for insertion of alternate low-res images for display.
      Added support for grayscale images to prJpeg after suggestions from Ingo Lachmann
