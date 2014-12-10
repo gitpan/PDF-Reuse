@@ -15,7 +15,7 @@ use Compress::Zlib qw(compress inflateInit);
 use autouse 'Data::Dumper'   => qw(Dumper);
 use AutoLoader qw(AUTOLOAD);
 
-our $VERSION = '0.35_05';
+our $VERSION = '0.36';
 our @ISA     = qw(Exporter);
 our @EXPORT  = qw(prFile
                   prPage
@@ -1260,6 +1260,9 @@ sub prStrWidth
    my $FontSize = shift || $fontSize;
    my $w = 0;
 
+   #FIXME: We need to have more robust error trapping and communication of that back to the caller
+   return unless $string; # there's no use continuing if no string is passed in
+
    if(my($width) = ttfStrWidth($string, $Font, $FontSize))
    {  return $width;
    }
@@ -1611,6 +1614,7 @@ The module doesn't make any attempt to import anything from encrypted files.
 To write a program with PDF::Reuse, you need these components:
 
 =begin html
+
 <style>
  pre span.comment {
   color:AA0000 ;
@@ -6404,7 +6408,7 @@ sub sidAnalys
 
    if (%links)
    {   my $tSida = $sida + 1;
-       if (defined (@{$links{'-1'}}) || (defined @{$links{$tSida}}))
+       if ((%links && @{$links{'-1'}}) || (%links && @{$links{$tSida}}))
        {   if ($del1 =~ m'/Annots\s*([^\/\<\>]+)'os)
            {  $Annots  = $1;
               @annots = ();
